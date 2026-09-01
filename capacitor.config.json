@@ -1,0 +1,9 @@
+{
+  "appId": "com.mishare.filetransfer",
+  "appName": "MI Share",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  }
+}

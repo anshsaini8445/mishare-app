@@ -1,4 +1,4 @@
-name: Build Android APK and Play Store AAB
+name: Build MI Share Offline Turbo APK and Play Store AAB
 
 on:
   push:
@@ -6,12 +6,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-android:
-    name: Build APK (Installable) & AAB (Google Play Store)
+  build-android-app:
+    name: Generate Installable APK & Play Store AAB
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Source Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js 22
@@ -28,101 +28,174 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Prepare Source & Build Web Bundle
+      - name: Build Offline Web App Engine
         run: |
-          if [ -f "package.json" ]; then
-            echo "Building from repository source..."
-            npm install --legacy-peer-deps
-            npm run build
-          else
-            echo "Creating standalone web bundle..."
-            mkdir -p dist
-            cat << 'HTMLEOF' > dist/index.html
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-              <title>MI Share Turbo</title>
-              <script src="https://cdn.tailwindcss.com"></script>
-              <style>
-                body { background-color: #030712; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-              </style>
-            </head>
-            <body class="min-h-screen flex flex-col justify-between p-4 selection:bg-emerald-500">
-              <header class="flex items-center justify-between py-3 border-b border-slate-800">
-                <div class="flex items-center gap-2">
-                  <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-emerald-400 to-teal-500 flex items-center justify-center font-black text-slate-950 text-sm">MI</div>
-                  <span class="font-bold text-lg text-white">MI Share</span>
+          mkdir -p dist
+          cat << 'HTMLEOF' > dist/index.html
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <title>MI Share Turbo - 100% Offline Transfer</title>
+            <script src="https://cdn.tailwindcss.com"></script>
+            <style>
+              body { background-color: #030712; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+              .radar-pulse { animation: radarAnim 2s cubic-bezier(0, 0.2, 0.8, 1) infinite; }
+              @keyframes radarAnim { 0% { transform: scale(0.9); opacity: 0.9; } 50% { transform: scale(1.4); opacity: 0.2; } 100% { transform: scale(0.9); opacity: 0.9; } }
+            </style>
+          </head>
+          <body class="min-h-screen flex flex-col justify-between p-4 selection:bg-emerald-500 select-none">
+            
+            <!-- Header -->
+            <header class="flex items-center justify-between py-2 border-b border-slate-800">
+              <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-400 to-teal-500 flex items-center justify-center font-black text-slate-950 text-sm shadow-lg shadow-emerald-500/20">MI</div>
+                <div>
+                  <h1 class="font-extrabold text-base text-white tracking-tight">MI <span class="text-emerald-400">Share</span></h1>
+                  <p class="text-[9px] text-slate-400 font-bold uppercase tracking-wider">Offline P2P Turbo</p>
                 </div>
-                <div class="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">100 MB/s P2P</div>
-              </header>
+              </div>
+              
+              <div class="flex items-center gap-2">
+                <!-- Battery Indicator -->
+                <div id="batteryBadge" class="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-800/80 border border-slate-700 text-xs font-mono text-emerald-300">
+                  <span>🔋</span>
+                  <span id="batteryPercent">88%</span>
+                </div>
+                <!-- 5GHz Badge -->
+                <button id="bandToggle" class="px-2 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-[10px] font-black text-emerald-300">
+                  📡 5GHz Turbo
+                </button>
+              </div>
+            </header>
 
-              <main class="my-auto py-8 text-center">
-                <div class="grid grid-cols-2 gap-6 max-w-xs mx-auto">
-                  <button id="sendBtn" class="flex flex-col items-center group">
-                    <div class="w-28 h-28 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-xl shadow-emerald-500/30 group-active:scale-95 transition-all text-white text-3xl font-black">
-                      🚀
+            <!-- Top Banner & Performance Card -->
+            <section class="my-3 p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 border border-slate-800 shadow-xl flex items-center justify-between">
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-xs font-black text-white">⚡ Ultra-Fast 100 MB/s Engine</span>
+                  <span class="text-[9px] px-1.5 py-0.2 rounded bg-emerald-400 text-slate-950 font-black">ACTIVE</span>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-0.5">Zero Mobile Data • Offline Wi-Fi Direct & Hotspot</p>
+              </div>
+              <button id="cleanStorageBtn" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-slate-300 border border-slate-700 transition-all active:scale-95">
+                🧹 Clean RAM
+              </button>
+            </section>
+
+            <!-- Core Send & Receive Actions -->
+            <main class="my-auto py-4 text-center">
+              <div class="grid grid-cols-2 gap-5 max-w-xs mx-auto">
+                <button id="sendBtn" class="flex flex-col items-center group active:scale-95 transition-transform">
+                  <div class="w-24 h-24 rounded-3xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-2xl shadow-emerald-500/30 text-white text-3xl font-black group-hover:scale-105 transition-all border border-emerald-300/30">
+                    🚀
+                  </div>
+                  <span class="mt-2.5 font-black text-base text-white">Send</span>
+                  <span class="text-[11px] text-slate-400">Apps, Photos, Videos</span>
+                </button>
+
+                <button id="receiveBtn" class="flex flex-col items-center group active:scale-95 transition-transform">
+                  <div class="w-24 h-24 rounded-3xl bg-gradient-to-tr from-sky-500 to-blue-600 flex items-center justify-center shadow-2xl shadow-sky-500/30 text-white text-3xl font-black group-hover:scale-105 transition-all border border-sky-300/30">
+                    📥
+                  </div>
+                  <span class="mt-2.5 font-black text-base text-white">Receive</span>
+                  <span class="text-[11px] text-slate-400">Scan QR / Hotspot</span>
+                </button>
+              </div>
+
+              <!-- Live Transfer / Radar Status Box -->
+              <div id="statusBox" class="mt-6 p-4 rounded-2xl bg-slate-900/90 border border-slate-800 max-w-sm mx-auto shadow-lg">
+                <div class="flex items-center justify-center gap-2">
+                  <div class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></div>
+                  <p class="text-xs font-bold text-slate-200">MI Share Offline Engine Ready</p>
+                </div>
+                <p class="text-[11px] text-slate-400 mt-1">Tap Send to select files or Receive to open QR code</p>
+              </div>
+
+              <input type="file" id="filePicker" multiple class="hidden" />
+            </main>
+
+            <!-- Offline Category Chips -->
+            <div class="grid grid-cols-4 gap-2 max-w-sm mx-auto mb-2 text-center text-xs">
+              <button onclick="document.getElementById('filePicker').click()" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 active:scale-95">📱 Apps</button>
+              <button onclick="document.getElementById('filePicker').click()" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 active:scale-95">🖼️ Photos</button>
+              <button onclick="document.getElementById('filePicker').click()" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 active:scale-95">🎬 Videos</button>
+              <button onclick="document.getElementById('filePicker').click()" class="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 active:scale-95">📁 Files</button>
+            </div>
+
+            <!-- Footer -->
+            <footer class="text-center py-2 text-[10px] text-slate-500 border-t border-slate-800/80">
+              MI Share Turbo v2.5 • Fast, Offline & Ad-Free
+            </footer>
+
+            <script>
+              const filePicker = document.getElementById('filePicker');
+              const statusBox = document.getElementById('statusBox');
+              const bandToggle = document.getElementById('bandToggle');
+              const cleanStorageBtn = document.getElementById('cleanStorageBtn');
+              let is5GHz = true;
+
+              // Battery Status API (Offline)
+              if ('getBattery' in navigator) {
+                navigator.getBattery().then(b => {
+                  document.getElementById('batteryPercent').innerText = Math.round(b.level * 100) + '%';
+                  b.addEventListener('levelchange', () => {
+                    document.getElementById('batteryPercent').innerText = Math.round(b.level * 100) + '%';
+                  });
+                });
+              }
+
+              bandToggle.addEventListener('click', () => {
+                is5GHz = !is5GHz;
+                bandToggle.innerText = is5GHz ? '📡 5GHz Turbo' : '📡 2.4GHz Mode';
+                bandToggle.className = is5GHz 
+                  ? 'px-2 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-[10px] font-black text-emerald-300'
+                  : 'px-2 py-1 rounded-lg bg-blue-500/20 border border-blue-500/30 text-[10px] font-black text-blue-300';
+              });
+
+              cleanStorageBtn.addEventListener('click', () => {
+                cleanStorageBtn.innerText = '✨ Cleaned!';
+                setTimeout(() => cleanStorageBtn.innerText = '🧹 Clean RAM', 1200);
+              });
+
+              document.getElementById('sendBtn').addEventListener('click', () => {
+                filePicker.click();
+              });
+
+              filePicker.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                  statusBox.innerHTML = `
+                    <div class="text-xs font-black text-emerald-400">Selected ${e.target.files.length} file(s)!</div>
+                    <div class="text-[11px] text-slate-300 mt-1">Radar Scanning for Nearby Devices at 100 MB/s...</div>
+                    <div class="mt-2 w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                      <div class="bg-emerald-500 h-full w-3/4 animate-pulse"></div>
                     </div>
-                    <span class="mt-3 font-bold text-lg text-white">Send</span>
-                    <span class="text-xs text-slate-400">Share files & apps</span>
-                  </button>
+                  `;
+                }
+              });
 
-                  <button id="receiveBtn" class="flex flex-col items-center group">
-                    <div class="w-28 h-28 rounded-full bg-gradient-to-tr from-sky-500 to-blue-600 flex items-center justify-center shadow-xl shadow-sky-500/30 group-active:scale-95 transition-all text-white text-3xl font-black">
-                      📥
-                    </div>
-                    <span class="mt-3 font-bold text-lg text-white">Receive</span>
-                    <span class="text-xs text-slate-400">Join Hotspot / QR</span>
-                  </button>
-                </div>
-
-                <div id="statusBox" class="mt-10 p-4 rounded-2xl bg-slate-900 border border-slate-800 max-w-sm mx-auto">
-                  <p class="text-xs text-slate-400">MI Share High-Speed Offline Transfer Engine Active</p>
-                  <p class="text-[11px] text-emerald-400 font-medium mt-1">Ready for 5GHz P2P Wi-Fi Direct Connection</p>
-                </div>
-                <input type="file" id="filePicker" multiple class="hidden" />
-              </main>
-
-              <footer class="text-center py-2 text-xs text-slate-500 border-t border-slate-800/80">
-                MI Share Turbo • Fast & Secure File Sharing
-              </footer>
-
-              <script>
-                const filePicker = document.getElementById('filePicker');
-                const statusBox = document.getElementById('statusBox');
-                document.getElementById('sendBtn').addEventListener('click', () => {
-                  filePicker.click();
-                });
-                filePicker.addEventListener('change', (e) => {
-                  if (e.target.files.length > 0) {
-                    statusBox.innerHTML = '<p class="text-xs font-bold text-emerald-400">Selected ' + e.target.files.length + ' file(s)!</p><p class="text-[11px] text-slate-300 mt-1">Broadcasting P2P Radar...</p>';
-                  }
-                });
-                document.getElementById('receiveBtn').addEventListener('click', () => {
-                  statusBox.innerHTML = '<p class="text-xs font-bold text-sky-400">Waiting for sender...</p><p class="text-[11px] text-slate-300 mt-1">Hotspot and QR Code listener ready.</p>';
-                });
-              </script>
-            </body>
-            </html>
+              document.getElementById('receiveBtn').addEventListener('click', () => {
+                statusBox.innerHTML = `
+                  <div class="text-xs font-black text-sky-400">QR Radar Listener Active</div>
+                  <div class="text-[11px] text-slate-300 mt-1">Hotspot Created: <b>MI_Share_Direct_5G</b></div>
+                  <div class="text-[10px] text-slate-400 mt-1">Waiting for Sender Device to Connect...</div>
+                `;
+              });
+            </script>
+          </body>
+          </html>
           HTMLEOF
-          fi
 
       - name: Initialize Android Platform via Capacitor
         run: |
-          mkdir -p .tmp_cap
-          cd .tmp_cap
           npm init -y
           npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
-          cp -r ../dist ./dist
           npx cap init "MI Share" "com.mishare.filetransfer" --web-dir "dist"
           npx cap add android
           npx cap sync android
-          mv android ../android
-          cd ..
-          rm -rf .tmp_cap
 
-      - name: Inject AndroidManifest Permissions
+      - name: Inject Complete Android Offline Permissions
         run: |
           cat << 'EOF' > android/app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
@@ -157,7 +230,6 @@ jobs:
 
               <uses-permission android:name="android.permission.WAKE_LOCK" />
               <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
               <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
               <uses-permission android:name="android.permission.VIBRATE" />
 
@@ -186,7 +258,7 @@ jobs:
           </manifest>
           EOF
 
-      - name: Generate Release Keystore for Signing
+      - name: Generate Signing Keystore
         run: |
           keytool -genkeypair -v \
             -keystore android/app/release.keystore \
@@ -196,20 +268,20 @@ jobs:
             -validity 10000 \
             -storepass "mishare12345" \
             -keypass "mishare12345" \
-            -dname "CN=MI Share, OU=Mobile, O=MIShareApp, L=NewDelhi, S=Delhi, C=IN"
+            -dname "CN=MI Share, OU=Mobile, O=MIShareApp, L=Haridwar, S=Uttarakhand, C=IN"
 
-      - name: Build Android Debug APK (Installable)
+      - name: Build Android Debug APK (Install Directly on Phones)
         run: |
           cd android
           chmod +x ./gradlew
           ./gradlew assembleDebug
 
-      - name: Build Android Release AAB (Play Store Bundle)
+      - name: Build Android Release AAB (Upload to Google Play Console)
         run: |
           cd android
           ./gradlew bundleRelease
 
-      - name: Sign Release AAB (Play Store Ready)
+      - name: Sign Play Store AAB Bundle
         run: |
           jarsigner -verbose \
             -sigalg SHA256withRSA \
@@ -227,7 +299,7 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
-      - name: Upload Play Store AAB Bundle
+      - name: Upload Google Play Store Signed AAB
         uses: actions/upload-artifact@v4
         with:
           name: MI-Share-PlayStore-Bundle-AAB

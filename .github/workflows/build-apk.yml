@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Android APK and Play Store AAB
 
 on:
   push:
@@ -6,12 +6,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-apk:
-    name: Build Android Release APK
+  build-android:
+    name: Build APK (Installable) & AAB (Google Play Store)
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Source Code
         uses: actions/checkout@v4
 
       - name: Setup Node.js 20
@@ -35,24 +35,121 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Capacitor CLI & Core
+      - name: Install Capacitor & Generate Android Platform
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
           npx cap init "MI Share" "com.mishare.filetransfer" --web-dir "dist"
           npx cap add android
+          npx cap sync android
 
-      - name: Sync Web Build to Android
-        run: npx cap sync android
+      - name: Inject Production AndroidManifest Permissions
+        run: |
+          cat << 'EOF' > android/app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.mishare.filetransfer">
 
-      - name: Build Debug APK with Gradle
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+              <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+              <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+              <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+
+              <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+              <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+              <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
+              <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+              <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+              <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" android:usesPermissionFlags="neverForLocation" />
+
+              <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+              <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+              <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+              <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+              <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
+              <uses-permission android:name="android.permission.CAMERA" />
+              <uses-feature android:name="android.hardware.camera" android:required="false" />
+              <uses-feature android:name="android.hardware.wifi.direct" android:required="false" />
+
+              <uses-permission android:name="android.permission.WAKE_LOCK" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+              <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+              <uses-permission android:name="android.permission.VIBRATE" />
+
+              <application
+                  android:allowBackup="true"
+                  android:icon="@mipmap/ic_launcher"
+                  android:label="MI Share"
+                  android:roundIcon="@mipmap/ic_launcher_round"
+                  android:supportsRtl="true"
+                  android:usesCleartextTraffic="true"
+                  android:theme="@style/AppTheme">
+
+                  <activity
+                      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+                      android:name=".MainActivity"
+                      android:label="MI Share"
+                      android:theme="@style/AppTheme.NoActionBarLaunch"
+                      android:launchMode="singleTask"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+      - name: Generate Release Keystore for Signing
+        run: |
+          keytool -genkeypair -v \
+            -keystore android/app/release.keystore \
+            -alias mishare \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass "mishare12345" \
+            -keypass "mishare12345" \
+            -dname "CN=MI Share, OU=Mobile, O=MIShareApp, L=NewDelhi, S=Delhi, C=IN"
+
+      - name: Build Android Debug APK
         run: |
           cd android
           chmod +x ./gradlew
           ./gradlew assembleDebug
 
-      - name: Upload APK Artifact
+      - name: Build Android Release AAB (Play Store Bundle)
+        run: |
+          cd android
+          ./gradlew bundleRelease
+
+      - name: Sign Release AAB (Play Store Ready)
+        run: |
+          jarsigner -verbose \
+            -sigalg SHA256withRSA \
+            -digestalg SHA-256 \
+            -keystore android/app/release.keystore \
+            -storepass "mishare12345" \
+            -keypass "mishare12345" \
+            android/app/build/outputs/bundle/release/app-release.aab \
+            mishare
+
+      - name: Upload Installable APK (For Direct Phone Testing)
         uses: actions/upload-artifact@v4
         with:
-          name: MI-Share-APK
+          name: MI-Share-Installable-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Upload Play Store AAB Bundle (For Google Play Console)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MI-Share-PlayStore-Bundle-AAB
+          path: android/app/build/outputs/bundle/release/app-release.aab
           retention-days: 30

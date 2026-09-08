@@ -2,435 +2,309 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>MI Share Turbo</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <style>
-    :root {
-      --bg: #0a0e17;
-      --card: #111827;
-      --accent: #10b981;
-      --accent2: #3b82f6;
-    }
     body {
-      background: var(--bg);
+      background: #0a0e17;
       color: #f1f5f9;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       -webkit-tap-highlight-color: transparent;
       user-select: none;
-      overflow-x: hidden;
     }
-    .glow-green { box-shadow: 0 0 40px rgba(16, 185, 129, 0.35); }
-    .glow-blue { box-shadow: 0 0 40px rgba(59, 130, 246, 0.35); }
+    .glow-green { box-shadow: 0 0 35px rgba(16, 185, 129, 0.4); }
+    .glow-blue { box-shadow: 0 0 35px rgba(59, 130, 246, 0.4); }
     .radar {
-      animation: radar 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      animation: radar 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
     }
     @keyframes radar {
-      0% { transform: scale(0.85); opacity: 0.9; }
-      70% { transform: scale(1.6); opacity: 0; }
-      100% { transform: scale(0.85); opacity: 0; }
+      0% { transform: scale(0.8); opacity: 0.8; }
+      70% { transform: scale(1.7); opacity: 0; }
+      100% { transform: scale(0.8); opacity: 0; }
     }
-    .slide-up {
-      animation: slideUp 0.35s ease-out;
-    }
+    .slide-up { animation: slideUp 0.35s ease-out; }
     @keyframes slideUp {
-      from { transform: translateY(100%); opacity: 0; }
+      from { transform: translateY(40px); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
     }
-    .fade-in {
-      animation: fadeIn 0.3s ease;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    /* Custom scrollbar */
-    ::-webkit-scrollbar { width: 4px; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
   </style>
 </head>
 <body class="min-h-screen flex flex-col">
 
-  <!-- ========== HEADER ========== -->
-  <header class="px-4 pt-4 pb-2 flex items-center justify-between sticky top-0 z-40 bg-[#0a0e17]/90 backdrop-blur-md">
+  <!-- HEADER -->
+  <header class="px-4 pt-4 pb-3 flex items-center justify-between sticky top-0 z-30 bg-[#0a0e17]/95 backdrop-blur">
     <div class="flex items-center gap-2.5">
-      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center font-black text-slate-900 text-sm shadow-lg">
+      <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center font-black text-slate-900 text-sm">
         MI
       </div>
       <div>
-        <h1 class="font-extrabold text-[17px] leading-tight tracking-tight">
-          MI <span class="text-emerald-400">Share</span>
-        </h1>
-        <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">v2.4.0 Turbo</p>
+        <h1 class="font-extrabold text-[17px]">MI <span class="text-emerald-400">Share</span></h1>
+        <p class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Turbo • Offline</p>
       </div>
     </div>
-
     <div class="flex items-center gap-2">
-      <div id="batteryBadge" class="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700 text-xs font-mono">
-        <span>🔋</span>
-        <span id="batteryPercent">--%</span>
+      <div class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-xs font-mono">
+        🔋 <span id="batteryPercent">--%</span>
       </div>
-      <button id="bandToggle" class="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-bold text-emerald-300">
-        5GHz
-      </button>
-      <button onclick="openSettings()" class="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-        </svg>
+      <button onclick="openSettings()" class="w-9 h-9 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center">
+        ⚙️
       </button>
     </div>
   </header>
 
-  <!-- ========== MAIN CONTENT ========== -->
-  <main class="flex-1 px-4 pb-6 overflow-y-auto">
+  <main class="flex-1 px-4 pb-8">
 
-    <!-- Ultra Fast Banner -->
-    <div class="mt-3 p-3.5 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 border border-slate-700/60 flex items-center justify-between">
-      <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-xl">
-          ⚡
-        </div>
-        <div>
-          <p class="text-sm font-bold text-white">Ultra-Fast 100 MB/s Engine</p>
-          <p class="text-[11px] text-slate-400">Direct Wi-Fi P2P • Zero Data Usage</p>
-        </div>
+    <!-- Banner -->
+    <div class="mt-3 p-3.5 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+      <div>
+        <p class="text-sm font-bold">⚡ Ultra-Fast Engine</p>
+        <p class="text-[11px] text-slate-400">Hotspot + Direct Transfer</p>
       </div>
-      <div class="flex items-center gap-1.5">
-        <span class="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">5GHz</span>
-        <span id="saverBadge" class="px-2 py-0.5 rounded-md bg-slate-700 text-slate-300 text-[10px] font-bold">Saver: OFF</span>
-      </div>
+      <span class="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">READY</span>
     </div>
 
-    <!-- Send / Receive Buttons -->
-    <div class="mt-8 grid grid-cols-2 gap-5 max-w-xs mx-auto">
-      <!-- SEND -->
-      <button id="sendBtn" class="flex flex-col items-center group active:scale-95 transition-all">
+    <!-- Send / Receive -->
+    <div class="mt-10 grid grid-cols-2 gap-6 max-w-xs mx-auto">
+      <button id="sendBtn" class="flex flex-col items-center active:scale-95 transition">
         <div class="relative w-28 h-28 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center glow-green">
-          <div class="absolute inset-0 rounded-full radar bg-emerald-400/30"></div>
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-white relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-          </svg>
+          <div class="absolute inset-0 rounded-full radar bg-emerald-400/40"></div>
+          <span class="text-4xl relative z-10">🚀</span>
         </div>
         <span class="mt-3 font-bold text-lg">Send</span>
-        <span class="text-[12px] text-slate-400">Share apps & files</span>
+        <span class="text-xs text-slate-400">Share files</span>
       </button>
 
-      <!-- RECEIVE -->
-      <button id="receiveBtn" class="flex flex-col items-center group active:scale-95 transition-all">
+      <button id="receiveBtn" class="flex flex-col items-center active:scale-95 transition">
         <div class="relative w-28 h-28 rounded-full bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center glow-blue">
-          <div class="absolute inset-0 rounded-full radar bg-sky-400/30" style="animation-delay: 0.6s;"></div>
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-12 h-12 text-white relative z-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-          </svg>
+          <div class="absolute inset-0 rounded-full radar bg-sky-400/40" style="animation-delay:0.5s"></div>
+          <span class="text-4xl relative z-10">📥</span>
         </div>
         <span class="mt-3 font-bold text-lg">Receive</span>
-        <span class="text-[12px] text-slate-400">Scan QR or Hotspot</span>
+        <span class="text-xs text-slate-400">Join & Download</span>
       </button>
     </div>
 
-    <!-- Status Box -->
-    <div id="statusBox" class="mt-6 mx-auto max-w-sm p-4 rounded-2xl bg-slate-900/80 border border-slate-800 text-center">
-      <div class="flex items-center justify-center gap-2">
-        <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
-        <p class="text-sm font-semibold text-slate-200">Engine Ready • Offline Mode</p>
-      </div>
-      <p class="text-[12px] text-slate-400 mt-1">Tap Send or Receive to start transfer</p>
+    <!-- Status -->
+    <div id="statusBox" class="mt-8 p-4 rounded-2xl bg-slate-900 border border-slate-800 text-center max-w-sm mx-auto">
+      <p class="text-sm font-semibold text-slate-200">Engine Ready</p>
+      <p class="text-xs text-slate-400 mt-1">Select files to start transfer</p>
     </div>
 
-    <!-- Quick Actions -->
-    <div class="mt-6 grid grid-cols-2 gap-3 max-w-sm mx-auto">
-      <button onclick="showHistory()" class="flex items-center gap-3 p-3.5 rounded-2xl bg-slate-900 border border-slate-800 active:scale-95 transition">
-        <div class="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-lg">🕒</div>
-        <div class="text-left">
-          <p class="text-sm font-bold">History</p>
-          <p class="text-[11px] text-slate-400">0 records</p>
-        </div>
-      </button>
-      <button onclick="showConnectPC()" class="flex items-center gap-3 p-3.5 rounded-2xl bg-slate-900 border border-slate-800 active:scale-95 transition">
-        <div class="w-10 h-10 rounded-xl bg-violet-500/20 flex items-center justify-center text-lg">💻</div>
-        <div class="text-left">
-          <p class="text-sm font-bold">Connect to PC</p>
-          <p class="text-[11px] text-slate-400">Web Browser Share</p>
-        </div>
-      </button>
-    </div>
+    <!-- Selected Files Preview -->
+    <div id="fileList" class="mt-5 hidden max-w-sm mx-auto"></div>
 
     <!-- Categories -->
-    <div class="mt-6">
-      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-1">Quick Share</p>
-      <div class="grid grid-cols-3 gap-2.5">
-        <button onclick="pickFiles('apps')" class="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-slate-900 border border-slate-800 active:scale-95">
-          <div class="w-11 h-11 rounded-xl bg-emerald-500/15 flex items-center justify-center text-xl">📱</div>
-          <span class="text-xs font-medium">Apps</span>
-        </button>
-        <button onclick="pickFiles('files')" class="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-slate-900 border border-slate-800 active:scale-95">
-          <div class="w-11 h-11 rounded-xl bg-blue-500/15 flex items-center justify-center text-xl">📄</div>
-          <span class="text-xs font-medium">Files</span>
-        </button>
-        <button onclick="pickFiles('videos')" class="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-slate-900 border border-slate-800 active:scale-95">
-          <div class="w-11 h-11 rounded-xl bg-rose-500/15 flex items-center justify-center text-xl">🎬</div>
-          <span class="text-xs font-medium">Videos</span>
-        </button>
-        <button onclick="pickFiles('photos')" class="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-slate-900 border border-slate-800 active:scale-95">
-          <div class="w-11 h-11 rounded-xl bg-amber-500/15 flex items-center justify-center text-xl">🖼️</div>
-          <span class="text-xs font-medium">Photos</span>
-        </button>
-        <button onclick="pickFiles('songs')" class="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-slate-900 border border-slate-800 active:scale-95">
-          <div class="w-11 h-11 rounded-xl bg-purple-500/15 flex items-center justify-center text-xl">🎵</div>
-          <span class="text-xs font-medium">Songs</span>
-        </button>
-        <button onclick="pickFiles('contacts')" class="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-slate-900 border border-slate-800 active:scale-95">
-          <div class="w-11 h-11 rounded-xl bg-cyan-500/15 flex items-center justify-center text-xl">👤</div>
-          <span class="text-xs font-medium">Contacts</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- Invite -->
-    <div class="mt-6 text-center">
-      <button onclick="inviteFriends()" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm font-semibold active:scale-95">
-        <span>🔗</span> Invite Friends
+    <div class="mt-8 grid grid-cols-3 gap-3">
+      <button onclick="pickFiles()" class="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-center active:scale-95">
+        <div class="text-2xl mb-1">📱</div>
+        <div class="text-xs">Apps</div>
+      </button>
+      <button onclick="pickFiles()" class="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-center active:scale-95">
+        <div class="text-2xl mb-1">📄</div>
+        <div class="text-xs">Files</div>
+      </button>
+      <button onclick="pickFiles()" class="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-center active:scale-95">
+        <div class="text-2xl mb-1">🎬</div>
+        <div class="text-xs">Videos</div>
+      </button>
+      <button onclick="pickFiles()" class="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-center active:scale-95">
+        <div class="text-2xl mb-1">🖼️</div>
+        <div class="text-xs">Photos</div>
+      </button>
+      <button onclick="pickFiles()" class="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-center active:scale-95">
+        <div class="text-2xl mb-1">🎵</div>
+        <div class="text-xs">Songs</div>
+      </button>
+      <button onclick="pickFiles()" class="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-center active:scale-95">
+        <div class="text-2xl mb-1">📁</div>
+        <div class="text-xs">All</div>
       </button>
     </div>
   </main>
 
-  <!-- Hidden file input -->
   <input type="file" id="filePicker" multiple class="hidden" />
 
-  <!-- ========== SETTINGS PANEL ========== -->
-  <div id="settingsPanel" class="fixed inset-0 z-50 hidden">
-    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeSettings()"></div>
-    <div class="absolute bottom-0 left-0 right-0 bg-[#0f172a] rounded-t-3xl p-5 max-h-[85vh] overflow-y-auto slide-up">
-      <!-- Device Info -->
-      <div class="flex items-center gap-3 mb-5">
-        <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center font-black text-slate-900 text-xl">
-          SM
-        </div>
-        <div>
-          <p class="font-bold text-lg">SM_M135FU</p>
-          <p class="text-sm text-slate-400">Samsung Galaxy M13 5G</p>
-        </div>
-        <button onclick="closeSettings()" class="ml-auto w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center">
-          ✕
-        </button>
+  <!-- ========== SEND MODAL ========== -->
+  <div id="sendModal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/70" onclick="closeSendModal()"></div>
+    <div class="absolute bottom-0 left-0 right-0 bg-[#0f172a] rounded-t-3xl p-5 slide-up max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold">Ready to Send</h2>
+        <button onclick="closeSendModal()" class="w-8 h-8 rounded-full bg-slate-800">✕</button>
       </div>
 
-      <!-- Storage -->
-      <div class="mb-5 p-3.5 rounded-2xl bg-slate-900 border border-slate-800">
-        <div class="flex justify-between text-sm mb-1.5">
-          <span class="text-slate-300">Storage</span>
-          <span class="font-mono text-emerald-300">19.34 / 50.82 GB</span>
-        </div>
-        <div class="h-2 rounded-full bg-slate-800 overflow-hidden">
-          <div class="h-full bg-gradient-to-r from-emerald-400 to-teal-400 rounded-full" style="width: 38%"></div>
-        </div>
+      <div id="sendFileInfo" class="mb-4 text-sm text-slate-300"></div>
+
+      <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800 mb-4 text-center">
+        <p class="text-xs text-slate-400 mb-1">Hotspot Name</p>
+        <p class="font-mono font-bold text-emerald-300 text-lg" id="hotspotName">MI_Share_Direct</p>
+        <p class="text-xs text-slate-400 mt-2">Password: <span class="text-white font-mono">mishare123</span></p>
       </div>
 
-      <!-- Menu Items -->
-      <div class="space-y-1">
-        <button class="w-full flex items-center gap-3 p-3.5 rounded-xl hover:bg-slate-800/60 transition">
-          <span class="text-xl">🌐</span>
-          <div class="text-left">
-            <p class="font-medium">Web Share (PC / iOS)</p>
-            <p class="text-xs text-slate-400">Browser direct transfer</p>
-          </div>
-        </button>
-        <button class="w-full flex items-center gap-3 p-3.5 rounded-xl hover:bg-slate-800/60 transition">
-          <span class="text-xl">🎨</span>
-          <div class="text-left flex items-center gap-2">
-            <p class="font-medium">Theme Center</p>
-            <span class="px-1.5 py-0.5 rounded text-[10px] bg-amber-500 text-slate-900 font-bold">NEW</span>
-          </div>
-        </button>
-        <button class="w-full flex items-center gap-3 p-3.5 rounded-xl hover:bg-slate-800/60 transition">
-          <span class="text-xl">🕒</span>
-          <div class="text-left">
-            <p class="font-medium">Transfer History & Vault</p>
-            <p class="text-xs text-slate-400">Sent & received files</p>
-          </div>
-        </button>
-        <button class="w-full flex items-center gap-3 p-3.5 rounded-xl hover:bg-slate-800/60 transition">
-          <span class="text-xl">👥</span>
-          <div class="text-left">
-            <p class="font-medium">Invite Friends</p>
-            <p class="text-xs text-slate-400">Share via Hotspot or Link</p>
-          </div>
-        </button>
+      <div class="flex justify-center mb-4">
+        <canvas id="qrCanvas" class="rounded-xl bg-white p-2"></canvas>
       </div>
 
-      <div class="my-4 border-t border-slate-800"></div>
-
-      <!-- Performance -->
-      <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Performance & Settings</p>
-      
-      <div class="space-y-3">
-        <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-900">
-          <div>
-            <p class="font-medium">Battery Saver Mode</p>
-            <p class="text-xs text-slate-400">AMOLED Dark & Energy Throttle</p>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" id="batterySaver" class="sr-only peer" onchange="toggleSaver()">
-            <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-          </label>
-        </div>
-
-        <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-900">
-          <div>
-            <p class="font-medium">Wi-Fi Band Priority</p>
-            <p class="text-xs text-slate-400">5GHz (100 MB/s Turbo)</p>
-          </div>
-          <span class="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 text-xs font-bold">5GHz</span>
-        </div>
-
-        <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-900">
-          <div>
-            <p class="font-medium">Auto-save received files</p>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" checked class="sr-only peer">
-            <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-          </label>
-        </div>
-
-        <button onclick="cleanCache()" class="w-full flex items-center justify-center gap-2 p-3.5 rounded-xl bg-slate-800 border border-slate-700 active:scale-95 transition">
-          🗑️ Clean Cache <span class="text-emerald-400 text-sm">(340 MB Free)</span>
-        </button>
-      </div>
-
-      <p class="text-center text-[11px] text-slate-500 mt-6 pb-4">
-        MI Share v2.4.0 (Turbo)<br>
-        Ultra High Speed P2P WiFi Direct Engine
+      <p class="text-xs text-center text-slate-400 mb-4">
+        Receiver ko is hotspot se connect karke QR scan karna hai ya link open karna hai
       </p>
+
+      <button onclick="startSending()" class="w-full py-3.5 rounded-xl bg-emerald-500 font-bold text-white active:scale-95">
+        Start Transfer
+      </button>
     </div>
   </div>
 
   <!-- ========== RECEIVE MODAL ========== -->
   <div id="receiveModal" class="fixed inset-0 z-50 hidden">
-    <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeReceive()"></div>
-    <div class="absolute bottom-0 left-0 right-0 bg-[#0f172a] rounded-t-3xl p-6 slide-up text-center">
-      <div class="w-16 h-16 mx-auto rounded-full bg-sky-500/20 flex items-center justify-center text-3xl mb-4">
-        📥
-      </div>
-      <h2 class="text-xl font-bold mb-1">Ready to Receive</h2>
-      <p class="text-sm text-slate-400 mb-5">Waiting for sender to connect...</p>
-      
-      <div class="p-4 rounded-2xl bg-slate-900 border border-slate-800 mb-5">
-        <p class="text-xs text-slate-400 mb-1">Hotspot Name</p>
-        <p class="font-mono font-bold text-emerald-300 text-lg">MI_Share_Direct_5G</p>
-        <p class="text-xs text-slate-500 mt-2">Password: <span class="text-slate-300">mishare2024</span></p>
+    <div class="absolute inset-0 bg-black/70" onclick="closeReceiveModal()"></div>
+    <div class="absolute bottom-0 left-0 right-0 bg-[#0f172a] rounded-t-3xl p-5 slide-up">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-lg font-bold">Receive Files</h2>
+        <button onclick="closeReceiveModal()" class="w-8 h-8 rounded-full bg-slate-800">✕</button>
       </div>
 
-      <div class="flex gap-3">
-        <button onclick="closeReceive()" class="flex-1 py-3 rounded-xl bg-slate-800 font-semibold">Cancel</button>
-        <button class="flex-1 py-3 rounded-xl bg-sky-500 font-semibold text-white">Show QR</button>
+      <div class="space-y-3 text-sm">
+        <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+          <p class="font-semibold text-emerald-300">Step 1</p>
+          <p class="text-slate-300">Sender ke phone ka Hotspot on kare</p>
+        </div>
+        <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+          <p class="font-semibold text-emerald-300">Step 2</p>
+          <p class="text-slate-300">Apne phone se us Hotspot se connect kare</p>
+        </div>
+        <div class="p-3 rounded-xl bg-slate-900 border border-slate-800">
+          <p class="font-semibold text-emerald-300">Step 3</p>
+          <p class="text-slate-300">QR code scan kare ya browser mein link open kare</p>
+        </div>
+      </div>
+
+      <button onclick="closeReceiveModal()" class="w-full mt-5 py-3 rounded-xl bg-sky-500 font-bold text-white">
+        Samajh Gaya
+      </button>
+    </div>
+  </div>
+
+  <!-- ========== SETTINGS ========== -->
+  <div id="settingsPanel" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/60" onclick="closeSettings()"></div>
+    <div class="absolute bottom-0 left-0 right-0 bg-[#0f172a] rounded-t-3xl p-5 slide-up">
+      <div class="flex justify-between items-center mb-5">
+        <h2 class="text-lg font-bold">Settings</h2>
+        <button onclick="closeSettings()" class="w-8 h-8 rounded-full bg-slate-800">✕</button>
+      </div>
+
+      <div class="space-y-3">
+        <div class="flex items-center justify-between p-3.5 rounded-xl bg-slate-900">
+          <div>
+            <p class="font-medium">Battery Saver</p>
+            <p class="text-xs text-slate-400">Reduce power usage</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="batterySaver" class="sr-only peer">
+            <div class="w-11 h-6 bg-slate-700 rounded-full peer peer-checked:after:translate-x-full peer-checked:bg-emerald-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+          </label>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-slate-900">
+          <p class="font-medium">Hotspot Name</p>
+          <p class="text-xs text-slate-400 mt-1">MI_Share_Direct</p>
+        </div>
+
+        <div class="p-3.5 rounded-xl bg-slate-900">
+          <p class="font-medium">Version</p>
+          <p class="text-xs text-slate-400 mt-1">MI Share Turbo v2.5.0</p>
+        </div>
       </div>
     </div>
   </div>
 
   <script>
-    // ========== Battery ==========
+    let selectedFiles = [];
+
+    // Battery
     if ('getBattery' in navigator) {
       navigator.getBattery().then(b => {
-        const update = () => {
+        document.getElementById('batteryPercent').innerText = Math.round(b.level * 100) + '%';
+        b.addEventListener('levelchange', () => {
           document.getElementById('batteryPercent').innerText = Math.round(b.level * 100) + '%';
-        };
-        update();
-        b.addEventListener('levelchange', update);
+        });
       });
     } else {
-      document.getElementById('batteryPercent').innerText = '77%';
+      document.getElementById('batteryPercent').innerText = '78%';
     }
 
-    // ========== Band Toggle ==========
-    let is5GHz = true;
-    document.getElementById('bandToggle').addEventListener('click', () => {
-      is5GHz = !is5GHz;
-      const btn = document.getElementById('bandToggle');
-      btn.innerText = is5GHz ? '5GHz' : '2.4GHz';
-      btn.className = is5GHz
-        ? 'px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-[11px] font-bold text-emerald-300'
-        : 'px-2.5 py-1 rounded-lg bg-blue-500/15 border border-blue-500/30 text-[11px] font-bold text-blue-300';
-    });
-
-    // ========== File Picker ==========
+    // File Picker
     const filePicker = document.getElementById('filePicker');
-    const statusBox = document.getElementById('statusBox');
-
-    document.getElementById('sendBtn').addEventListener('click', () => {
-      filePicker.click();
-    });
-
-    function pickFiles(type) {
-      filePicker.click();
-    }
+    document.getElementById('sendBtn').addEventListener('click', () => filePicker.click());
+    function pickFiles() { filePicker.click(); }
 
     filePicker.addEventListener('change', (e) => {
-      if (e.target.files.length > 0) {
-        const count = e.target.files.length;
-        statusBox.innerHTML = `
-          <div class="text-sm font-bold text-emerald-400">Selected \( {count} file \){count > 1 ? 's' : ''}</div>
-          <p class="text-[12px] text-slate-300 mt-1">Radar scanning nearby devices at 100 MB/s...</p>
-          <div class="mt-3 w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-            <div class="bg-gradient-to-r from-emerald-400 to-teal-400 h-full w-2/3 animate-pulse rounded-full"></div>
-          </div>
-        `;
-      }
+      selectedFiles = Array.from(e.target.files);
+      if (selectedFiles.length === 0) return;
+
+      // Show file list
+      const list = document.getElementById('fileList');
+      list.classList.remove('hidden');
+      list.innerHTML = selectedFiles.map(f => 
+        `<div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-slate-800 mb-2 text-sm">
+          <span class="truncate">${f.name}</span>
+          <span class="text-xs text-slate-400 ml-2">${(f.size/1024/1024).toFixed(1)} MB</span>
+        </div>`
+      ).join('');
+
+      // Open send modal
+      openSendModal();
     });
 
-    // ========== Receive ==========
+    function openSendModal() {
+      document.getElementById('sendModal').classList.remove('hidden');
+      document.getElementById('sendFileInfo').innerHTML = 
+        `<b>\( {selectedFiles.length}</b> file selected • Total size: <b> \){(selectedFiles.reduce((a,b)=>a+b.size,0)/1024/1024).toFixed(1)} MB</b>`;
+
+      // Generate simple QR (instruction)
+      const canvas = document.getElementById('qrCanvas');
+      QRCode.toCanvas(canvas, 'MI_Share_Direct|mishare123|Connect to this hotspot and open the shared link', {
+        width: 180,
+        margin: 1,
+        color: { dark: '#000000', light: '#ffffff' }
+      });
+    }
+
+    function closeSendModal() {
+      document.getElementById('sendModal').classList.add('hidden');
+    }
+
+    function startSending() {
+      const status = document.getElementById('statusBox');
+      status.innerHTML = `
+        <p class="text-sm font-bold text-emerald-400">Transfer Started</p>
+        <p class="text-xs text-slate-300 mt-1">Hotspot active • Waiting for receiver...</p>
+        <div class="mt-3 w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+          <div class="bg-emerald-500 h-full w-1/3 animate-pulse rounded-full"></div>
+        </div>
+      `;
+      closeSendModal();
+      alert('Ab receiver ko apna Hotspot on karke connect karne ko kaho.\n\nNote: Full automatic high-speed transfer ke liye native plugin chahiye. Abhi basic version hai.');
+    }
+
+    // Receive
     document.getElementById('receiveBtn').addEventListener('click', () => {
       document.getElementById('receiveModal').classList.remove('hidden');
-      statusBox.innerHTML = `
-        <div class="text-sm font-bold text-sky-400">QR Radar Listener Active</div>
-        <p class="text-[12px] text-slate-300 mt-1">Hotspot: <b>MI_Share_Direct_5G</b></p>
-      `;
     });
-
-    function closeReceive() {
+    function closeReceiveModal() {
       document.getElementById('receiveModal').classList.add('hidden');
     }
 
-    // ========== Settings ==========
+    // Settings
     function openSettings() {
       document.getElementById('settingsPanel').classList.remove('hidden');
     }
     function closeSettings() {
       document.getElementById('settingsPanel').classList.add('hidden');
     }
-
-    function toggleSaver() {
-      const checked = document.getElementById('batterySaver').checked;
-      document.getElementById('saverBadge').innerText = checked ? 'Saver: ON' : 'Saver: OFF';
-      document.getElementById('saverBadge').className = checked
-        ? 'px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 text-[10px] font-bold'
-        : 'px-2 py-0.5 rounded-md bg-slate-700 text-slate-300 text-[10px] font-bold';
-    }
-
-    function cleanCache() {
-      alert('Cache cleaned successfully!\n340 MB freed.');
-    }
-
-    function showHistory() {
-      alert('Transfer History is empty.\nStart sending/receiving files!');
-    }
-
-    function showConnectPC() {
-      alert('Connect to PC feature\nOpen this page on your computer browser and scan QR.');
-    }
-
-    function inviteFriends() {
-      if (navigator.share) {
-        navigator.share({
-          title: 'MI Share Turbo',
-          text: 'Fast offline file transfer app!',
-          url: window.location.href
-        });
-      } else {
-        alert('Invite link copied!');
-      }
-    }
   </script>
 </body>
-</html>
+          </html>

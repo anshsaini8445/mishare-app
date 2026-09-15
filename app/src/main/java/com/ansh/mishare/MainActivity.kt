@@ -49,9 +49,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 1. Offline Receiver Engine (Server Socket)
     private fun startReceiverServer() {
-        tvTransferLog.text = "Waiting for Sender... Hotspot IP: 192.168.43.1"
+        tvTransferLog.text = "Waiting for Sender... IP: 192.168.43.1"
         imgQrCode.visibility = View.VISIBLE
         generateQRCode("MISHARE:192.168.43.1:$PORT")
 
@@ -60,14 +59,14 @@ class MainActivity : AppCompatActivity() {
                 val serverSocket = ServerSocket(PORT)
                 val socket = serverSocket.accept()
                 withContext(Dispatchers.Main) {
-                    tvTransferLog.text = "Connected! Receiving binary stream..."
+                    tvTransferLog.text = "Connected! Receiving file..."
                 }
 
                 val inputStream = DataInputStream(socket.getInputStream())
                 val fileName = inputStream.readUTF()
                 val fileSize = inputStream.readLong()
 
-                val downloadsDir = getExternalFilesDir(null)
+                val downloadsDir = getExternalFilesDir(null) ?: cacheDir
                 val targetFile = File(downloadsDir, fileName)
                 val fos = FileOutputStream(targetFile)
 
@@ -88,7 +87,7 @@ class MainActivity : AppCompatActivity() {
 
                 withContext(Dispatchers.Main) {
                     tvTransferLog.text = "Completed: $fileName saved!"
-                    Toast.makeText(this@MainActivity, "File received successfully!", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@MainActivity, "File received!", Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -98,7 +97,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 2. Offline Sender Engine (Client Socket)
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == PICK_FILE_REQ && resultCode == Activity.RESULT_OK) {
@@ -109,8 +107,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun sendSelectedFile(uri: Uri) {
-        val targetIP = "192.168.43.1" // Default hotspot IP
-        tvTransferLog.text = "Connecting to receiver: $targetIP..."
+        val targetIP = "192.168.43.1"
+        tvTransferLog.text = "Connecting to $targetIP..."
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -133,11 +131,11 @@ class MainActivity : AppCompatActivity() {
                 pfd.close()
 
                 withContext(Dispatchers.Main) {
-                    tvTransferLog.text = "File sent successfully via 5GHz Direct!"
+                    tvTransferLog.text = "File sent successfully!"
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
-                    tvTransferLog.text = "Failed to connect to receiver IP: $targetIP"
+                    tvTransferLog.text = "Failed to connect to: $targetIP"
                 }
             }
         }
@@ -149,7 +147,7 @@ class MainActivity : AppCompatActivity() {
         val bitmap = Bitmap.createBitmap(512, 512, Bitmap.Config.RGB_565)
         for (x in 0 until 512) {
             for (y in 0 until 512) {
-                bitmap.setPixel(x, y, if (bitMatrix[x, y]) Color.BLACK else Color.WHITE)
+                bitmap.setPixel(x, y, if (bitMatrix.get(x, y)) Color.BLACK else Color.WHITE)
             }
         }
         imgQrCode.setImageBitmap(bitmap)

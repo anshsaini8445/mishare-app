@@ -11,15 +11,22 @@ android {
         applicationId "com.ansh.rapidshare"
         minSdk 26
         targetSdk 34
-        versionCode 1
-        versionName "1.0.0"
+        versionCode 2
+        versionName "2.0.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
             minifyEnabled false
+            shrinkResources false
+        }
+        debug {
+            minifyEnabled false
+            shrinkResources false
         }
     }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -33,8 +40,11 @@ dependencies {
     implementation 'androidx.core:core-ktx:1.12.0'
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.viewpager2:viewpager2:1.0.0'
+    implementation 'androidx.fragment:fragment-ktx:1.6.2'
     implementation 'androidx.cardview:cardview:1.0.0'
     implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    implementation 'androidx.webkit:webkit:1.10.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     implementation 'com.google.zxing:core:3.5.3'
     implementation 'com.journeyapps:zxing-android-embedded:4.3.0'

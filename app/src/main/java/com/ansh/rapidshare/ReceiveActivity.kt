@@ -19,14 +19,14 @@ class ReceiveActivity : AppCompatActivity() {
 
         findViewById<TextView>(R.id.btnBackReceive).setOnClickListener { finish() }
 
-        val dev = Build.DEVICE ?: "Air Rapid Device"
-        findViewById<TextView>(R.id.tvDeviceHeader).text = dev
+        val model = Build.MODEL ?: "Air Rapid Device"
+        findViewById<TextView>(R.id.tvDeviceHeader).text = model
 
-        val qrContent = "AIR_RAPID://SSID:DIRECT-AIR-RAPID;IP:192.168.43.1;PORT:8888;;"
-        findViewById<ImageView>(R.id.ivQRCode).setImageBitmap(generateQRCodeBitmap(qrContent))
+        val qrContent = "AIR_RAPID://SSID:DIRECT-AIR-RAPID-6G;IP:192.168.43.1;PORT:8888;BAND:6GHZ;;"
+        findViewById<ImageView>(R.id.ivQRCode).setImageBitmap(makeQR(qrContent))
 
         findViewById<Button>(R.id.btnWifiDirectSwitch).setOnClickListener {
-            showTransferModeDialog()
+            showModeSelect()
         }
 
         findViewById<Button>(R.id.btnReceiveFromPC).setOnClickListener {
@@ -39,28 +39,26 @@ class ReceiveActivity : AppCompatActivity() {
         startService(serviceIntent)
     }
 
-    private fun showTransferModeDialog() {
-        val modes = arrayOf(
-            "Wi-Fi Direct\nConnect directly via Wi-Fi P2P",
-            "Hotspot\nCreate Local Hotspot (Zero Data)"
+    private fun showModeSelect() {
+        val options = arrayOf(
+            "Wi-Fi Direct\nTurn on Wi-Fi to connect (Fastest)",
+            "Hotspot\nCreate a Hotspot to connect (Universal)"
         )
-        var selectedIndex = 0
-
         AlertDialog.Builder(this)
-            .setTitle("Transfer Mode")
-            .setMessage("No internet data is consumed in both modes.")
-            .setSingleChoiceItems(modes, 0) { _, which -> selectedIndex = which }
-            .setPositiveButton("OK") { _, _ ->
-                val chosen = if (selectedIndex == 0) "Wi-Fi Direct" else "Hotspot"
-                Toast.makeText(this, "Active Mode: " + chosen, Toast.LENGTH_SHORT).show()
+            .setTitle("Transfer mode")
+            .setMessage("No Internet data is consumed in both two modes.")
+            .setSingleChoiceItems(options, 0) { dialog, which ->
+                val chosen = if (which == 0) "Wi-Fi Direct (6GHz)" else "Hotspot Mode"
+                Toast.makeText(this, "Active: $chosen", Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
             }
             .setNegativeButton("CANCEL", null)
             .show()
     }
 
-    private fun generateQRCodeBitmap(content: String): Bitmap {
+    private fun makeQR(data: String): Bitmap {
         val writer = QRCodeWriter()
-        val matrix = writer.encode(content, BarcodeFormat.QR_CODE, 512, 512)
+        val matrix = writer.encode(data, BarcodeFormat.QR_CODE, 512, 512)
         val bmp = Bitmap.createBitmap(512, 512, Bitmap.Config.RGB_565)
         for (x in 0 until 512) {
             for (y in 0 until 512) {

@@ -15,18 +15,18 @@ class WebShareActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.btnBackWeb).setOnClickListener { finish() }
 
         findViewById<LinearLayout>(R.id.optHotspotMode).setOnClickListener {
-            showWebAddressDialog("Hotspot Mode", "192.168.43.1")
+            showIPDialog("Hotspot Mode (Faster)", "192.168.43.1")
         }
 
         findViewById<LinearLayout>(R.id.optWifiMode).setOnClickListener {
-            showWebAddressDialog("Wi-Fi Mode", "192.168.1.100")
+            showIPDialog("Wi-Fi Mode (Convenient)", "192.168.1.100")
         }
     }
 
-    private fun showWebAddressDialog(title: String, ip: String) {
+    private fun showIPDialog(mode: String, ip: String) {
         AlertDialog.Builder(this)
-            .setTitle(title)
-            .setMessage("Open this link in your PC or iOS browser:\nhttp://" + ip + ":8888")
+            .setTitle(mode)
+            .setMessage("Connect your PC/iPhone to same network and open:\nhttp://$ip:8888")
             .setPositiveButton("OK", null)
             .show()
     }

@@ -4,7 +4,9 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -16,7 +18,7 @@ import com.google.zxing.integration.android.IntentIntegrator
 import kotlinx.coroutines.*
 import java.io.File
 
-data class ShareItem(
+data class MediaItem(
     val name: String,
     val size: String,
     val icon: Drawable?,
@@ -26,9 +28,9 @@ data class ShareItem(
 
 class SendActivity : AppCompatActivity() {
 
-    private val allItems = mutableListOf<ShareItem>()
-    private val selectedItems = mutableListOf<ShareItem>()
-    private lateinit var adapter: ShareItemAdapter
+    private val currentDisplayList = mutableListOf<MediaItem>()
+    private val selectedList = mutableListOf<MediaItem>()
+    private lateinit var adapter: ItemGridAdapter
     private lateinit var tvSelectedCount: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,38 +41,44 @@ class SendActivity : AppCompatActivity() {
         val rvItems = findViewById<RecyclerView>(R.id.rvItems)
         rvItems.layoutManager = GridLayoutManager(this, 4)
 
-        adapter = ShareItemAdapter(allItems) { selectedItem ->
-            if (selectedItem.isSelected) {
-                selectedItems.add(selectedItem)
-            } else {
-                selectedItems.remove(selectedItem)
-            }
-            tvSelectedCount.text = "${selectedItems.size} SELECTED"
+        adapter = ItemGridAdapter(currentDisplayList) { item ->
+            if (item.isSelected) selectedList.add(item) else selectedList.remove(item)
+            tvSelectedCount.text = "${selectedList.size} SELECTED"
         }
         rvItems.adapter = adapter
 
         findViewById<TextView>(R.id.btnBack).setOnClickListener { finish() }
 
+        setupTabClicks()
         loadInstalledApps()
 
         findViewById<Button>(R.id.btnNext).setOnClickListener {
-            if (selectedItems.isEmpty()) {
-                Toast.makeText(this, "Please select at least one file", Toast.LENGTH_SHORT).show()
+            if (selectedList.isEmpty()) {
+                Toast.makeText(this, "Select at least 1 file to send", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
             val integrator = IntentIntegrator(this)
-            integrator.setPrompt("Scan Receiver QR Code")
+            integrator.setPrompt("Scan Receiver QR Code to Transfer")
             integrator.setBeepEnabled(true)
             integrator.setOrientationLocked(true)
             integrator.initiateScan()
         }
     }
 
+    private fun setupTabClicks() {
+        findViewById<TextView>(R.id.tabApps).setOnClickListener { loadInstalledApps() }
+        findViewById<TextView>(R.id.tabVideos).setOnClickListener { loadMediaFiles(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, "Videos") }
+        findViewById<TextView>(R.id.tabPhotos).setOnClickListener { loadMediaFiles(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "Photos") }
+        findViewById<TextView>(R.id.tabSongs).setOnClickListener { loadMediaFiles(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, "Music") }
+        findViewById<TextView>(R.id.tabFiles).setOnClickListener { loadStorageFiles() }
+    }
+
     private fun loadInstalledApps() {
+        findViewById<TextView>(R.id.tvSectionHeader).text = "Installed Packages"
         CoroutineScope(Dispatchers.IO).launch {
             val pm = packageManager
             val apps = pm.getInstalledApplications(PackageManager.GET_META_DATA)
-            val list = mutableListOf<ShareItem>()
+            val list = mutableListOf<MediaItem>()
 
             for (app in apps) {
                 if ((app.flags and ApplicationInfo.FLAG_SYSTEM) == 0 || (app.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0) {
@@ -78,13 +86,55 @@ class SendActivity : AppCompatActivity() {
                     val icon = pm.getApplicationIcon(app)
                     val file = File(app.sourceDir)
                     val mb = file.length() / (1024.0 * 1024.0)
-                    list.add(ShareItem(name, String.format("%.1f MB", mb), icon, file.absolutePath))
+                    list.add(MediaItem(name, String.format("%.1f MB", mb), icon, file.absolutePath))
                 }
             }
-
             withContext(Dispatchers.Main) {
-                allItems.clear()
-                allItems.addAll(list)
+                currentDisplayList.clear()
+                currentDisplayList.addAll(list)
+                adapter.notifyDataSetChanged()
+            }
+        }
+    }
+
+    private fun loadMediaFiles(uri: Uri, label: String) {
+        findViewById<TextView>(R.id.tvSectionHeader).text = label
+        CoroutineScope(Dispatchers.IO).launch {
+            val list = mutableListOf<MediaItem>()
+            val projection = arrayOf(MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATA)
+            val cursor = contentResolver.query(uri, projection, null, null, null)
+            cursor?.use {
+                val nameCol = it.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                val sizeCol = it.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+                val dataCol = it.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
+                while (it.moveToNext()) {
+                    val name = it.getString(nameCol) ?: "Media"
+                    val sizeBytes = it.getLong(sizeCol)
+                    val path = it.getString(dataCol) ?: ""
+                    val sizeMb = sizeBytes / (1024.0 * 1024.0)
+                    list.add(MediaItem(name, String.format("%.1f MB", sizeMb), null, path))
+                }
+            }
+            withContext(Dispatchers.Main) {
+                currentDisplayList.clear()
+                currentDisplayList.addAll(list)
+                adapter.notifyDataSetChanged()
+            }
+        }
+    }
+
+    private fun loadStorageFiles() {
+        findViewById<TextView>(R.id.tvSectionHeader).text = "Storage Files"
+        CoroutineScope(Dispatchers.IO).launch {
+            val list = mutableListOf<MediaItem>()
+            val downloadFolder = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            downloadFolder.listFiles()?.forEach { file ->
+                val mb = file.length() / (1024.0 * 1024.0)
+                list.add(MediaItem(file.name, String.format("%.1f MB", mb), null, file.absolutePath))
+            }
+            withContext(Dispatchers.Main) {
+                currentDisplayList.clear()
+                currentDisplayList.addAll(list)
                 adapter.notifyDataSetChanged()
             }
         }
@@ -93,8 +143,7 @@ class SendActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         val result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
         if (result != null && result.contents != null) {
-            Toast.makeText(this, "Connected: Starting Turbo Transfer", Toast.LENGTH_LONG).show()
-
+            Toast.makeText(this, "QR Paired: Starting Wi-Fi 6 Turbo Transfer", Toast.LENGTH_LONG).show()
             val serviceIntent = Intent(this, TransferService::class.java).apply {
                 putExtra("IS_SENDER", true)
                 putExtra("TARGET_IP", "192.168.43.1")
@@ -106,10 +155,10 @@ class SendActivity : AppCompatActivity() {
         }
     }
 
-    class ShareItemAdapter(
-        private val items: List<ShareItem>,
-        private val onSelect: (ShareItem) -> Unit
-    ) : RecyclerView.Adapter<ShareItemAdapter.ViewHolder>() {
+    class ItemGridAdapter(
+        private val items: List<MediaItem>,
+        private val onSelect: (MediaItem) -> Unit
+    ) : RecyclerView.Adapter<ItemGridAdapter.ViewHolder>() {
 
         class ViewHolder(v: View) : RecyclerView.ViewHolder(v) {
             val ivIcon: ImageView = v.findViewById(R.id.ivIcon)
@@ -124,20 +173,20 @@ class SendActivity : AppCompatActivity() {
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            val currentItem = items[position]
-            holder.tvName.text = currentItem.name
-            holder.tvSize.text = currentItem.size
-            if (currentItem.icon != null) {
-                holder.ivIcon.setImageDrawable(currentItem.icon)
+            val itm = items[position]
+            holder.tvName.text = itm.name
+            holder.tvSize.text = itm.size
+            if (itm.icon != null) {
+                holder.ivIcon.setImageDrawable(itm.icon)
             } else {
                 holder.ivIcon.setImageResource(android.R.drawable.sym_def_app_icon)
             }
-            holder.cbSelect.isChecked = currentItem.isSelected
+            holder.cbSelect.isChecked = itm.isSelected
 
             holder.itemView.setOnClickListener {
-                currentItem.isSelected = !currentItem.isSelected
-                holder.cbSelect.isChecked = currentItem.isSelected
-                onSelect(currentItem)
+                itm.isSelected = !itm.isSelected
+                holder.cbSelect.isChecked = itm.isSelected
+                onSelect(itm)
             }
         }
 

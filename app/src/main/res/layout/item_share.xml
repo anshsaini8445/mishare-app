@@ -35,7 +35,7 @@
         android:ellipsize="end"
         android:gravity="center"
         android:maxLines="1"
-        android:textColor="#212529"
+        android:textColor="#1C2536"
         android:textSize="12sp"
         android:textStyle="bold" />
 
@@ -44,6 +44,6 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center"
-        android:textColor="#6C757D"
+        android:textColor="#7A889B"
         android:textSize="10sp" />
 </LinearLayout>

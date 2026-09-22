@@ -10,6 +10,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
+import java.net.NetworkInterface
 
 class ReceiveActivity : AppCompatActivity() {
 
@@ -22,8 +23,10 @@ class ReceiveActivity : AppCompatActivity() {
         val model = Build.MODEL ?: "Air Rapid Device"
         findViewById<TextView>(R.id.tvDeviceHeader).text = model
 
-        val qrContent = "AIR_RAPID://SSID:DIRECT-AIR-RAPID-6G;IP:192.168.43.1;PORT:8888;BAND:6GHZ;;"
+        val localIp = getDeviceIpAddress()
+        val qrContent = "INSHARE://SSID:DIRECT-AIR-RAPID-6G;IP:$localIp;PORT:8888;BAND:6GHZ;;"
         findViewById<ImageView>(R.id.ivQRCode).setImageBitmap(makeQR(qrContent))
+        findViewById<TextView>(R.id.tvHotspotSSID).text = "IP: $localIp (Port 8888)"
 
         findViewById<Button>(R.id.btnWifiDirectSwitch).setOnClickListener {
             showModeSelect()
@@ -39,9 +42,26 @@ class ReceiveActivity : AppCompatActivity() {
         startService(serviceIntent)
     }
 
+    private fun getDeviceIpAddress(): String {
+        try {
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            for (intf in interfaces) {
+                val addrs = intf.inetAddresses
+                for (addr in addrs) {
+                    if (!addr.isLoopbackAddress && addr.hostAddress.indexOf(':') < 0) {
+                        return addr.hostAddress
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return "192.168.43.1"
+    }
+
     private fun showModeSelect() {
         val options = arrayOf(
-            "Wi-Fi Direct\nTurn on Wi-Fi to connect (Fastest)",
+            "Wi-Fi Direct\nConnect directly via Wi-Fi P2P (Fastest)",
             "Hotspot\nCreate a Hotspot to connect (Universal)"
         )
         AlertDialog.Builder(this)

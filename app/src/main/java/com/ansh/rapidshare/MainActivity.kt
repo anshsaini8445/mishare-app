@@ -12,7 +12,6 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
@@ -77,7 +76,7 @@ class MainActivity : AppCompatActivity() {
         val model = Build.MODEL ?: "Device"
         AlertDialog.Builder(this)
             .setTitle("Air Rapid Share Engine")
-            .setMessage("Model: $model\nWi-Fi Bands: 2.4GHz / 5GHz / 6GHz (Wi-Fi 6 Ready)\nTransfer Rate: 100 MB/s P2P Direct\nStatus: Online & Ready")
+            .setMessage("Model: $model\nWi-Fi Bands: 2.4GHz / 5GHz / 6GHz (Wi-Fi 6 Ready)\nSocket Engine: Port 8888 Active\nFolder: Download/AirRapidShare")
             .setPositiveButton("OK", null)
             .show()
     }

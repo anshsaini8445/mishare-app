@@ -33,6 +33,10 @@ class SendActivity : AppCompatActivity() {
     private lateinit var adapter: ItemGridAdapter
     private lateinit var tvSelectedCount: TextView
 
+    companion object {
+        var filesToSend = ArrayList<String>()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_send)
@@ -42,7 +46,11 @@ class SendActivity : AppCompatActivity() {
         rvItems.layoutManager = GridLayoutManager(this, 4)
 
         adapter = ItemGridAdapter(currentDisplayList) { item ->
-            if (item.isSelected) selectedList.add(item) else selectedList.remove(item)
+            if (item.isSelected) {
+                selectedList.add(item)
+            } else {
+                selectedList.remove(item)
+            }
             tvSelectedCount.text = "${selectedList.size} SELECTED"
         }
         rvItems.adapter = adapter
@@ -57,6 +65,9 @@ class SendActivity : AppCompatActivity() {
                 Toast.makeText(this, "Select at least 1 file to send", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
+            filesToSend.clear()
+            selectedList.forEach { filesToSend.add(it.path) }
+
             val integrator = IntentIntegrator(this)
             integrator.setPrompt("Scan Receiver QR Code to Transfer")
             integrator.setBeepEnabled(true)
@@ -143,10 +154,17 @@ class SendActivity : AppCompatActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         val result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
         if (result != null && result.contents != null) {
-            Toast.makeText(this, "QR Paired: Starting Wi-Fi 6 Turbo Transfer", Toast.LENGTH_LONG).show()
+            var targetIp = "192.168.43.1"
+            val raw = result.contents
+            if (raw.contains("IP:")) {
+                targetIp = raw.substringAfter("IP:").substringBefore(";")
+            }
+            Toast.makeText(this, "Connected: Sending to $targetIp", Toast.LENGTH_LONG).show()
+
             val serviceIntent = Intent(this, TransferService::class.java).apply {
                 putExtra("IS_SENDER", true)
-                putExtra("TARGET_IP", "192.168.43.1")
+                putExtra("TARGET_IP", targetIp)
+                putStringArrayListExtra("FILE_PATHS", filesToSend)
             }
             startService(serviceIntent)
             finish()

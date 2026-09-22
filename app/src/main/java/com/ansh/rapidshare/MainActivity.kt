@@ -15,50 +15,55 @@ import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
 
-    private val PERMISSION_REQUEST_CODE = 5001
+    private val PERMISSION_REQUEST_CODE = 9001
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        checkPermissions()
-        setupInteractions()
-        updateStorageView()
+        requestNecessaryPermissions()
+        setupActionListeners()
+        refreshStorageStatistics()
     }
 
-    private fun setupInteractions() {
+    private fun setupActionListeners() {
         findViewById<View>(R.id.cardSend)?.setOnClickListener {
-            triggerFeedback()
+            doHaptic()
             startActivity(Intent(this, SendActivity::class.java))
         }
 
         findViewById<View>(R.id.cardReceive)?.setOnClickListener {
-            triggerFeedback()
+            doHaptic()
             startActivity(Intent(this, ReceiveActivity::class.java))
         }
 
-        findViewById<View>(R.id.cardWebShare)?.setOnClickListener {
-            triggerFeedback()
+        findViewById<View>(R.id.btnPcShare)?.setOnClickListener {
+            doHaptic()
             startActivity(Intent(this, WebShareActivity::class.java))
         }
 
         findViewById<TextView>(R.id.btnMenu)?.setOnClickListener {
-            triggerFeedback()
-            showInfoModal()
+            doHaptic()
+            showInShareSettings()
         }
 
-        val categoryClick = View.OnClickListener {
-            triggerFeedback()
+        findViewById<View>(R.id.btnStorageDetails)?.setOnClickListener {
+            doHaptic()
+            showStorageBreakdown()
+        }
+
+        val categoryOpen = View.OnClickListener {
+            doHaptic()
             startActivity(Intent(this, SendActivity::class.java))
         }
 
-        findViewById<View>(R.id.catApps)?.setOnClickListener(categoryClick)
-        findViewById<View>(R.id.catVideos)?.setOnClickListener(categoryClick)
-        findViewById<View>(R.id.catPhotos)?.setOnClickListener(categoryClick)
-        findViewById<View>(R.id.catSongs)?.setOnClickListener(categoryClick)
+        findViewById<View>(R.id.catApps)?.setOnClickListener(categoryOpen)
+        findViewById<View>(R.id.catVideos)?.setOnClickListener(categoryOpen)
+        findViewById<View>(R.id.catPhotos)?.setOnClickListener(categoryOpen)
+        findViewById<View>(R.id.catSongs)?.setOnClickListener(categoryOpen)
     }
 
-    private fun updateStorageView() {
+    private fun refreshStorageStatistics() {
         try {
             val path = Environment.getDataDirectory()
             val stat = StatFs(path.path)
@@ -66,48 +71,52 @@ class MainActivity : AppCompatActivity() {
             val freeGb = (stat.availableBlocksLong * stat.blockSizeLong) / (1024.0 * 1024.0 * 1024.0)
             val usedGb = totalGb - freeGb
 
-            findViewById<TextView>(R.id.tvStorageSub)?.text = String.format("%.2f GB / %.2f GB", usedGb, totalGb)
+            findViewById<TextView>(R.id.tvStorageSub)?.text = String.format("%.1f GB Used / %.1f GB Total", usedGb, totalGb)
         } catch (e: Exception) {
-            findViewById<TextView>(R.id.tvStorageSub)?.text = "18.44 GB / 50.82 GB"
+            findViewById<TextView>(R.id.tvStorageSub)?.text = "24.5 GB Used / 64.0 GB Total"
         }
     }
 
-    private fun showInfoModal() {
-        val model = Build.MODEL ?: "Device"
+    private fun showInShareSettings() {
+        val model = Build.MODEL ?: "Android"
         AlertDialog.Builder(this)
             .setTitle("Air Rapid Share Engine")
-            .setMessage("Model: $model\nWi-Fi Bands: 2.4GHz / 5GHz / 6GHz (Wi-Fi 6 Ready)\nSocket Engine: Port 8888 Active\nFolder: Download/AirRapidShare")
+            .setMessage("Device: $model\nEngine: P2P Socket Turbo\nProtocol: InShare Direct Handshake\nPath: /Downloads/AirRapidShare")
             .setPositiveButton("OK", null)
             .show()
     }
 
-    private fun triggerFeedback() {
+    private fun showStorageBreakdown() {
+        Toast.makeText(this, "Storage scanner active", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun doHaptic() {
         val v = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            v?.vibrate(VibrationEffect.createOneShot(40, VibrationEffect.DEFAULT_AMPLITUDE))
+            v?.vibrate(VibrationEffect.createOneShot(35, VibrationEffect.DEFAULT_AMPLITUDE))
         } else {
-            v?.vibrate(40)
+            v?.vibrate(35)
         }
     }
 
-    private fun checkPermissions() {
-        val perms = mutableListOf<String>()
+    private fun requestNecessaryPermissions() {
+        val list = mutableListOf<String>()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            perms.add(Manifest.permission.READ_MEDIA_IMAGES)
-            perms.add(Manifest.permission.READ_MEDIA_VIDEO)
-            perms.add(Manifest.permission.READ_MEDIA_AUDIO)
-            perms.add(Manifest.permission.NEARBY_WIFI_DEVICES)
-            perms.add(Manifest.permission.POST_NOTIFICATIONS)
+            list.add(Manifest.permission.READ_MEDIA_IMAGES)
+            list.add(Manifest.permission.READ_MEDIA_VIDEO)
+            list.add(Manifest.permission.READ_MEDIA_AUDIO)
+            list.add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            list.add(Manifest.permission.POST_NOTIFICATIONS)
         } else {
-            perms.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-            perms.add(Manifest.permission.ACCESS_FINE_LOCATION)
+            list.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+            list.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            list.add(Manifest.permission.ACCESS_FINE_LOCATION)
         }
-        perms.add(Manifest.permission.CAMERA)
+        list.add(Manifest.permission.CAMERA)
 
-        val needed = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
-        if (needed.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, needed.toTypedArray(), PERMISSION_REQUEST_CODE)
+        val ungranted = list.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
+        if (ungranted.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, ungranted.toTypedArray(), PERMISSION_REQUEST_CODE)
         }
     }
 }

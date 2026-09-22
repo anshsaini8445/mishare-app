@@ -3,6 +3,7 @@ package com.ansh.rapidshare
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.os.Bundle
@@ -34,7 +35,7 @@ class SendActivity : AppCompatActivity() {
     private lateinit var tvSelectedCount: TextView
 
     companion object {
-        var filesToSend = ArrayList<String>()
+        var queuedPaths = ArrayList<String>()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -51,40 +52,69 @@ class SendActivity : AppCompatActivity() {
             } else {
                 selectedList.remove(item)
             }
-            tvSelectedCount.text = "${selectedList.size} SELECTED"
+            tvSelectedCount.text = "${selectedList.size} Selected"
         }
         rvItems.adapter = adapter
 
         findViewById<TextView>(R.id.btnBack).setOnClickListener { finish() }
 
-        setupTabClicks()
-        loadInstalledApps()
+        setupTabs()
+        loadApps()
 
         findViewById<Button>(R.id.btnNext).setOnClickListener {
             if (selectedList.isEmpty()) {
                 Toast.makeText(this, "Select at least 1 file to send", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            filesToSend.clear()
-            selectedList.forEach { filesToSend.add(it.path) }
+            queuedPaths.clear()
+            selectedList.forEach { queuedPaths.add(it.path) }
 
             val integrator = IntentIntegrator(this)
-            integrator.setPrompt("Scan Receiver QR Code to Transfer")
+            integrator.setPrompt("Scan Receiver QR Code")
             integrator.setBeepEnabled(true)
             integrator.setOrientationLocked(true)
             integrator.initiateScan()
         }
     }
 
-    private fun setupTabClicks() {
-        findViewById<TextView>(R.id.tabApps).setOnClickListener { loadInstalledApps() }
-        findViewById<TextView>(R.id.tabVideos).setOnClickListener { loadMediaFiles(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, "Videos") }
-        findViewById<TextView>(R.id.tabPhotos).setOnClickListener { loadMediaFiles(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "Photos") }
-        findViewById<TextView>(R.id.tabSongs).setOnClickListener { loadMediaFiles(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, "Music") }
-        findViewById<TextView>(R.id.tabFiles).setOnClickListener { loadStorageFiles() }
+    private fun setupTabs() {
+        findViewById<TextView>(R.id.tabApps).setOnClickListener {
+            resetTabColors()
+            (it as TextView).setTextColor(Color.parseColor("#0078FF"))
+            loadApps()
+        }
+        findViewById<TextView>(R.id.tabVideos).setOnClickListener {
+            resetTabColors()
+            (it as TextView).setTextColor(Color.parseColor("#0078FF"))
+            loadMedia(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, "Videos")
+        }
+        findViewById<TextView>(R.id.tabPhotos).setOnClickListener {
+            resetTabColors()
+            (it as TextView).setTextColor(Color.parseColor("#0078FF"))
+            loadMedia(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "Photos")
+        }
+        findViewById<TextView>(R.id.tabSongs).setOnClickListener {
+            resetTabColors()
+            (it as TextView).setTextColor(Color.parseColor("#0078FF"))
+            loadMedia(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, "Music")
+        }
+        findViewById<TextView>(R.id.tabFiles).setOnClickListener {
+            resetTabColors()
+            (it as TextView).setTextColor(Color.parseColor("#0078FF"))
+            loadFiles()
+        }
     }
 
-    private fun loadInstalledApps() {
+    private fun resetTabColors() {
+        val inactive = Color.parseColor("#64748B")
+        findViewById<TextView>(R.id.tabApps).setTextColor(inactive)
+        findViewById<TextView>(R.id.tabVideos).setTextColor(inactive)
+        findViewById<TextView>(R.id.tabPhotos).setTextColor(inactive)
+        findViewById<TextView>(R.id.tabSongs).setTextColor(inactive)
+        findViewById<TextView>(R.id.tabFiles).setTextColor(inactive)
+    }
+
+    private fun loadApps() {
         findViewById<TextView>(R.id.tvSectionHeader).text = "Installed Packages"
         CoroutineScope(Dispatchers.IO).launch {
             val pm = packageManager
@@ -108,22 +138,22 @@ class SendActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadMediaFiles(uri: Uri, label: String) {
-        findViewById<TextView>(R.id.tvSectionHeader).text = label
+    private fun loadMedia(uri: Uri, headerTitle: String) {
+        findViewById<TextView>(R.id.tvSectionHeader).text = headerTitle
         CoroutineScope(Dispatchers.IO).launch {
             val list = mutableListOf<MediaItem>()
             val projection = arrayOf(MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATA)
             val cursor = contentResolver.query(uri, projection, null, null, null)
             cursor?.use {
-                val nameCol = it.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
-                val sizeCol = it.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
-                val dataCol = it.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
+                val nameIdx = it.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                val sizeIdx = it.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+                val dataIdx = it.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
                 while (it.moveToNext()) {
-                    val name = it.getString(nameCol) ?: "Media"
-                    val sizeBytes = it.getLong(sizeCol)
-                    val path = it.getString(dataCol) ?: ""
-                    val sizeMb = sizeBytes / (1024.0 * 1024.0)
-                    list.add(MediaItem(name, String.format("%.1f MB", sizeMb), null, path))
+                    val name = it.getString(nameIdx) ?: "File"
+                    val size = it.getLong(sizeIdx)
+                    val path = it.getString(dataIdx) ?: ""
+                    val mb = size / (1024.0 * 1024.0)
+                    list.add(MediaItem(name, String.format("%.1f MB", mb), null, path))
                 }
             }
             withContext(Dispatchers.Main) {
@@ -134,14 +164,16 @@ class SendActivity : AppCompatActivity() {
         }
     }
 
-    private fun loadStorageFiles() {
-        findViewById<TextView>(R.id.tvSectionHeader).text = "Storage Files"
+    private fun loadFiles() {
+        findViewById<TextView>(R.id.tvSectionHeader).text = "Downloaded Files"
         CoroutineScope(Dispatchers.IO).launch {
             val list = mutableListOf<MediaItem>()
-            val downloadFolder = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-            downloadFolder.listFiles()?.forEach { file ->
-                val mb = file.length() / (1024.0 * 1024.0)
-                list.add(MediaItem(file.name, String.format("%.1f MB", mb), null, file.absolutePath))
+            val folder = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            folder.listFiles()?.forEach { f ->
+                if (f.isFile) {
+                    val mb = f.length() / (1024.0 * 1024.0)
+                    list.add(MediaItem(f.name, String.format("%.1f MB", mb), null, f.absolutePath))
+                }
             }
             withContext(Dispatchers.Main) {
                 currentDisplayList.clear()
@@ -159,12 +191,12 @@ class SendActivity : AppCompatActivity() {
             if (raw.contains("IP:")) {
                 targetIp = raw.substringAfter("IP:").substringBefore(";")
             }
-            Toast.makeText(this, "Connected: Sending to $targetIp", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Target: $targetIp. Sending...", Toast.LENGTH_LONG).show()
 
             val serviceIntent = Intent(this, TransferService::class.java).apply {
                 putExtra("IS_SENDER", true)
                 putExtra("TARGET_IP", targetIp)
-                putStringArrayListExtra("FILE_PATHS", filesToSend)
+                putStringArrayListExtra("FILES", queuedPaths)
             }
             startService(serviceIntent)
             finish()
@@ -175,7 +207,7 @@ class SendActivity : AppCompatActivity() {
 
     class ItemGridAdapter(
         private val items: List<MediaItem>,
-        private val onSelect: (MediaItem) -> Unit
+        private val onCheck: (MediaItem) -> Unit
     ) : RecyclerView.Adapter<ItemGridAdapter.ViewHolder>() {
 
         class ViewHolder(v: View) : RecyclerView.ViewHolder(v) {
@@ -191,20 +223,20 @@ class SendActivity : AppCompatActivity() {
         }
 
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-            val itm = items[position]
-            holder.tvName.text = itm.name
-            holder.tvSize.text = itm.size
-            if (itm.icon != null) {
-                holder.ivIcon.setImageDrawable(itm.icon)
+            val item = items[position]
+            holder.tvName.text = item.name
+            holder.tvSize.text = item.size
+            if (item.icon != null) {
+                holder.ivIcon.setImageDrawable(item.icon)
             } else {
                 holder.ivIcon.setImageResource(android.R.drawable.sym_def_app_icon)
             }
-            holder.cbSelect.isChecked = itm.isSelected
+            holder.cbSelect.isChecked = item.isSelected
 
             holder.itemView.setOnClickListener {
-                itm.isSelected = !itm.isSelected
-                holder.cbSelect.isChecked = itm.isSelected
-                onSelect(itm)
+                item.isSelected = !item.isSelected
+                holder.cbSelect.isChecked = item.isSelected
+                onCheck(item)
             }
         }
 

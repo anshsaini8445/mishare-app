@@ -6,7 +6,6 @@ import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.widget.*
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
@@ -20,21 +19,13 @@ class ReceiveActivity : AppCompatActivity() {
 
         findViewById<TextView>(R.id.btnBackReceive).setOnClickListener { finish() }
 
-        val model = Build.MODEL ?: "Air Rapid Device"
+        val model = Build.MODEL ?: "Android Device"
         findViewById<TextView>(R.id.tvDeviceHeader).text = model
 
-        val localIp = getDeviceIpAddress()
-        val qrContent = "INSHARE://SSID:DIRECT-AIR-RAPID-6G;IP:$localIp;PORT:8888;BAND:6GHZ;;"
-        findViewById<ImageView>(R.id.ivQRCode).setImageBitmap(makeQR(qrContent))
-        findViewById<TextView>(R.id.tvHotspotSSID).text = "IP: $localIp (Port 8888)"
-
-        findViewById<Button>(R.id.btnWifiDirectSwitch).setOnClickListener {
-            showModeSelect()
-        }
-
-        findViewById<Button>(R.id.btnReceiveFromPC).setOnClickListener {
-            startActivity(Intent(this, WebShareActivity::class.java))
-        }
+        val localIp = fetchLocalIP()
+        val qrString = "INSHARE://IP:$localIp;PORT:8888;DEVICE:$model;;"
+        findViewById<ImageView>(R.id.ivQRCode).setImageBitmap(generateQR(qrString))
+        findViewById<TextView>(R.id.tvHotspotSSID).text = "Device IP: $localIp (Port 8888)"
 
         val serviceIntent = Intent(this, TransferService::class.java).apply {
             putExtra("IS_SENDER", false)
@@ -42,10 +33,10 @@ class ReceiveActivity : AppCompatActivity() {
         startService(serviceIntent)
     }
 
-    private fun getDeviceIpAddress(): String {
+    private fun fetchLocalIP(): String {
         try {
-            val interfaces = NetworkInterface.getNetworkInterfaces()
-            for (intf in interfaces) {
+            val ifaces = NetworkInterface.getNetworkInterfaces()
+            for (intf in ifaces) {
                 val addrs = intf.inetAddresses
                 for (addr in addrs) {
                     if (!addr.isLoopbackAddress && addr.hostAddress.indexOf(':') < 0) {
@@ -59,26 +50,9 @@ class ReceiveActivity : AppCompatActivity() {
         return "192.168.43.1"
     }
 
-    private fun showModeSelect() {
-        val options = arrayOf(
-            "Wi-Fi Direct\nConnect directly via Wi-Fi P2P (Fastest)",
-            "Hotspot\nCreate a Hotspot to connect (Universal)"
-        )
-        AlertDialog.Builder(this)
-            .setTitle("Transfer mode")
-            .setMessage("No Internet data is consumed in both two modes.")
-            .setSingleChoiceItems(options, 0) { dialog, which ->
-                val chosen = if (which == 0) "Wi-Fi Direct (6GHz)" else "Hotspot Mode"
-                Toast.makeText(this, "Active: $chosen", Toast.LENGTH_SHORT).show()
-                dialog.dismiss()
-            }
-            .setNegativeButton("CANCEL", null)
-            .show()
-    }
-
-    private fun makeQR(data: String): Bitmap {
+    private fun generateQR(text: String): Bitmap {
         val writer = QRCodeWriter()
-        val matrix = writer.encode(data, BarcodeFormat.QR_CODE, 512, 512)
+        val matrix = writer.encode(text, BarcodeFormat.QR_CODE, 512, 512)
         val bmp = Bitmap.createBitmap(512, 512, Bitmap.Config.RGB_565)
         for (x in 0 until 512) {
             for (y in 0 until 512) {

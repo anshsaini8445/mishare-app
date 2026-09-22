@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F5F7FB"
+    android:background="#F4F7FC"
     android:fillViewport="true">
 
     <LinearLayout
@@ -11,10 +11,11 @@
         android:layout_height="wrap_content"
         android:orientation="vertical">
 
+        <!-- True InShare Blue Header -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="220dp"
-            android:background="#0084FF"
+            android:layout_height="wrap_content"
+            android:background="#0078FF"
             android:orientation="vertical"
             android:padding="20dp">
 
@@ -28,9 +29,12 @@
                     android:id="@+id/btnMenu"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:padding="6dp"
                     android:text="MENU"
                     android:textColor="#FFFFFF"
-                    android:textSize="14sp"
+                    android:textSize="15sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -40,36 +44,43 @@
                     android:layout_weight="1"
                     android:text="Air Rapid Share"
                     android:textColor="#FFFFFF"
-                    android:textSize="20sp"
+                    android:textSize="21sp"
                     android:textStyle="bold" />
 
                 <TextView
+                    android:id="@+id/btnPcShare"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:background="#1665D8"
-                    android:paddingStart="10dp"
-                    android:paddingTop="4dp"
-                    android:paddingEnd="10dp"
-                    android:paddingBottom="4dp"
-                    android:text="Wi-Fi 6 6GHz"
-                    android:textColor="#00D59B"
-                    android:textSize="11sp"
+                    android:background="#1565C0"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingStart="12dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="6dp"
+                    android:text="PC Web"
+                    android:textColor="#FFFFFF"
+                    android:textSize="12sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
+            <!-- InShare Giant Dual Circle Buttons -->
             <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:layout_marginBottom="16dp"
                 android:gravity="center"
                 android:orientation="horizontal">
 
                 <LinearLayout
                     android:id="@+id/cardSend"
-                    android:layout_width="120dp"
-                    android:layout_height="120dp"
-                    android:layout_marginEnd="24dp"
-                    android:background="@drawable/ic_rapid_logo"
+                    android:layout_width="114dp"
+                    android:layout_height="114dp"
+                    android:layout_marginEnd="20dp"
+                    android:background="@drawable/circle_send"
                     android:clickable="true"
+                    android:elevation="6dp"
                     android:focusable="true"
                     android:gravity="center"
                     android:orientation="vertical">
@@ -79,17 +90,25 @@
                         android:layout_height="wrap_content"
                         android:text="SEND"
                         android:textColor="#FFFFFF"
-                        android:textSize="22sp"
+                        android:textSize="20sp"
                         android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Fast Mode"
+                        android:textColor="#E0FFFFFF"
+                        android:textSize="10sp" />
                 </LinearLayout>
 
                 <LinearLayout
                     android:id="@+id/cardReceive"
-                    android:layout_width="120dp"
-                    android:layout_height="120dp"
-                    android:layout_marginStart="24dp"
-                    android:background="@drawable/ic_rapid_logo"
+                    android:layout_width="114dp"
+                    android:layout_height="114dp"
+                    android:layout_marginStart="20dp"
+                    android:background="@drawable/circle_receive"
                     android:clickable="true"
+                    android:elevation="6dp"
                     android:focusable="true"
                     android:gravity="center"
                     android:orientation="vertical">
@@ -99,20 +118,29 @@
                         android:layout_height="wrap_content"
                         android:text="RECEIVE"
                         android:textColor="#FFFFFF"
-                        android:textSize="20sp"
+                        android:textSize="19sp"
                         android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="QR Ready"
+                        android:textColor="#E0FFFFFF"
+                        android:textSize="10sp" />
                 </LinearLayout>
             </LinearLayout>
         </LinearLayout>
 
+        <!-- Storage Info Card -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
-            android:layout_marginTop="-24dp"
+            android:layout_marginTop="-16dp"
             android:layout_marginEnd="16dp"
+            app:cardBackgroundColor="#FFFFFF"
             app:cardCornerRadius="16dp"
-            app:cardElevation="6dp">
+            app:cardElevation="4dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -128,11 +156,10 @@
                     android:orientation="vertical">
 
                     <TextView
-                        android:id="@+id/tvStorageTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:text="Internal Storage"
-                        android:textColor="#1C2536"
+                        android:textColor="#1E293B"
                         android:textSize="14sp"
                         android:textStyle="bold" />
 
@@ -141,86 +168,103 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="2dp"
-                        android:text="Calculating storage..."
-                        android:textColor="#7A889B"
+                        android:text="Scanning space..."
+                        android:textColor="#64748B"
                         android:textSize="12sp" />
                 </LinearLayout>
 
-                <Button
-                    android:id="@+id/cardWebShare"
+                <TextView
+                    android:id="@+id/btnStorageDetails"
                     android:layout_width="wrap_content"
-                    android:layout_height="38dp"
-                    android:backgroundTint="#0084FF"
-                    android:text="Connect to PC"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11sp" />
+                    android:layout_height="wrap_content"
+                    android:background="#F1F5F9"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:paddingStart="12dp"
+                    android:paddingTop="6dp"
+                    android:paddingEnd="12dp"
+                    android:paddingBottom="6dp"
+                    android:text="Details"
+                    android:textColor="#0078FF"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
+        <!-- Quick Categories Label -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="20dp"
-            android:layout_marginTop="24dp"
-            android:text="Categories"
-            android:textColor="#1C2536"
+            android:layout_marginTop="22dp"
+            android:text="File Categories"
+            android:textColor="#1E293B"
             android:textSize="16sp"
             android:textStyle="bold" />
 
+        <!-- Category Selection Row -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
             android:weightSum="4">
 
             <LinearLayout
                 android:id="@+id/catApps"
                 android:layout_width="0dp"
-                android:layout_height="90dp"
+                android:layout_height="80dp"
                 android:layout_margin="4dp"
                 android:layout_weight="1"
                 android:background="#FFFFFF"
+                android:clickable="true"
+                android:focusable="true"
                 android:gravity="center"
                 android:orientation="vertical">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="APPS" android:textColor="#0084FF" android:textStyle="bold" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="APPS" android:textColor="#0078FF" android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/catVideos"
                 android:layout_width="0dp"
-                android:layout_height="90dp"
+                android:layout_height="80dp"
                 android:layout_margin="4dp"
                 android:layout_weight="1"
                 android:background="#FFFFFF"
+                android:clickable="true"
+                android:focusable="true"
                 android:gravity="center"
                 android:orientation="vertical">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="VIDEOS" android:textColor="#00D59B" android:textStyle="bold" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="VIDEOS" android:textColor="#00C853" android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/catPhotos"
                 android:layout_width="0dp"
-                android:layout_height="90dp"
+                android:layout_height="80dp"
                 android:layout_margin="4dp"
                 android:layout_weight="1"
                 android:background="#FFFFFF"
+                android:clickable="true"
+                android:focusable="true"
                 android:gravity="center"
                 android:orientation="vertical">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PHOTOS" android:textColor="#FF9800" android:textStyle="bold" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="PHOTOS" android:textColor="#F59E0B" android:textStyle="bold" />
             </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/catSongs"
                 android:layout_width="0dp"
-                android:layout_height="90dp"
+                android:layout_height="80dp"
                 android:layout_margin="4dp"
                 android:layout_weight="1"
                 android:background="#FFFFFF"
+                android:clickable="true"
+                android:focusable="true"
                 android:gravity="center"
                 android:orientation="vertical">
-                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MUSIC" android:textColor="#E91E63" android:textStyle="bold" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="MUSIC" android:textColor="#EC4899" android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>

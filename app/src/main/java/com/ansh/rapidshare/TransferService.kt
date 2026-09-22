@@ -23,24 +23,24 @@ class TransferService : Service() {
     override fun onCreate() {
         super.onCreate()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
+            val chan = NotificationChannel(
                 CHANNEL_ID,
                 "Air Rapid High-Speed Engine",
                 NotificationManager.IMPORTANCE_LOW
             )
             val mgr = getSystemService(NotificationManager::class.java)
-            mgr?.createNotificationChannel(channel)
+            mgr?.createNotificationChannel(chan)
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val isSender = intent?.getBooleanExtra("IS_SENDER", false) ?: false
         val targetIp = intent?.getStringExtra("TARGET_IP") ?: "192.168.43.1"
-        val files = intent?.getStringArrayListExtra("FILE_PATHS") ?: ArrayList()
+        val files = intent?.getStringArrayListExtra("FILES") ?: ArrayList()
 
         val notif = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Air Rapid Share Engine")
-            .setContentText(if (isSender) "Sending files at 100 MB/s..." else "Listening for incoming files...")
+            .setContentText(if (isSender) "Streaming files..." else "Ready for files...")
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setOngoing(true)
             .build()
@@ -50,9 +50,68 @@ class TransferService : Service() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 if (isSender) {
-                    runSenderPipeline(targetIp, files)
+                    val sock = Socket(targetIp, 8888)
+                    sock.tcpNoDelay = true
+                    sock.sendBufferSize = 262144
+
+                    val dos = DataOutputStream(BufferedOutputStream(sock.getOutputStream()))
+                    dos.writeInt(files.size)
+
+                    for (p in files) {
+                        val f = File(p)
+                        if (!f.exists()) continue
+                        dos.writeUTF(f.name)
+                        dos.writeLong(f.length())
+
+                        val fis = FileInputStream(f)
+                        val buf = ByteArray(262144)
+                        var r: Int
+                        while (fis.read(buf).also { r = it } != -1) {
+                            dos.write(buf, 0, r)
+                        }
+                        fis.close()
+                        dos.flush()
+                    }
+                    dos.close()
+                    sock.close()
                 } else {
-                    runReceiverPipeline()
+                    val server = ServerSocket(8888)
+                    server.receiveBufferSize = 262144
+                    val sock = server.accept()
+                    sock.tcpNoDelay = true
+
+                    val dis = DataInputStream(BufferedInputStream(sock.getInputStream()))
+                    val count = dis.readInt()
+
+                    val destFolder = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "AirRapidShare")
+                    if (!destFolder.exists()) destFolder.mkdirs()
+
+                    for (i in 0 until count) {
+                        val name = dis.readUTF()
+                        val len = dis.readLong()
+
+                        val outFile = File(destFolder, name)
+                        val fos = FileOutputStream(outFile)
+                        val buf = ByteArray(262144)
+                        var rem = len
+                        while (rem > 0) {
+                            val r = dis.read(buf, 0, Math.min(buf.size.toLong(), rem).toInt())
+                            if (r == -1) break
+                            fos.write(buf, 0, r)
+                            rem -= r
+                        }
+                        fos.close()
+
+                        MediaScannerConnection.scanFile(
+                            applicationContext,
+                            arrayOf(outFile.absolutePath),
+                            null,
+                            null
+                        )
+                    }
+                    dis.close()
+                    sock.close()
+                    server.close()
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
@@ -62,82 +121,5 @@ class TransferService : Service() {
             }
         }
         return START_NOT_STICKY
-    }
-
-    private fun runSenderPipeline(targetIp: String, filePaths: List<String>) {
-        try {
-            val socket = Socket(targetIp, 8888)
-            socket.tcpNoDelay = true
-            socket.sendBufferSize = 262144
-
-            val dos = DataOutputStream(BufferedOutputStream(socket.getOutputStream()))
-            dos.writeInt(filePaths.size)
-
-            for (path in filePaths) {
-                val file = File(path)
-                if (!file.exists()) continue
-
-                dos.writeUTF(file.name)
-                dos.writeLong(file.length())
-
-                val fis = FileInputStream(file)
-                val buffer = ByteArray(262144)
-                var read: Int
-                while (fis.read(buffer).also { read = it } != -1) {
-                    dos.write(buffer, 0, read)
-                }
-                fis.close()
-                dos.flush()
-            }
-            dos.close()
-            socket.close()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    private fun runReceiverPipeline() {
-        try {
-            val serverSocket = ServerSocket(8888)
-            serverSocket.receiveBufferSize = 262144
-            val clientSocket = serverSocket.accept()
-            clientSocket.tcpNoDelay = true
-
-            val dis = DataInputStream(BufferedInputStream(clientSocket.getInputStream()))
-            val totalFiles = dis.readInt()
-
-            val destFolder = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "AirRapidShare")
-            if (!destFolder.exists()) destFolder.mkdirs()
-
-            for (i in 0 until totalFiles) {
-                val fileName = dis.readUTF()
-                val fileSize = dis.readLong()
-
-                val outputFile = File(destFolder, fileName)
-                val fos = FileOutputStream(outputFile)
-
-                val buffer = ByteArray(262144)
-                var remaining = fileSize
-                while (remaining > 0) {
-                    val read = dis.read(buffer, 0, Math.min(buffer.size.toLong(), remaining).toInt())
-                    if (read == -1) break
-                    fos.write(buffer, 0, read)
-                    remaining -= read
-                }
-                fos.close()
-
-                MediaScannerConnection.scanFile(
-                    applicationContext,
-                    arrayOf(outputFile.absolutePath),
-                    null,
-                    null
-                )
-            }
-            dis.close()
-            clientSocket.close()
-            serverSocket.close()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
     }
 }

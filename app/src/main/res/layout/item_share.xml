@@ -4,7 +4,7 @@
     android:layout_height="wrap_content"
     android:gravity="center_horizontal"
     android:orientation="vertical"
-    android:padding="8dp">
+    android:padding="6dp">
 
     <RelativeLayout
         android:layout_width="64dp"
@@ -22,7 +22,7 @@
             android:layout_height="wrap_content"
             android:layout_alignParentEnd="true"
             android:layout_alignParentBottom="true"
-            android:buttonTint="#00D59B"
+            android:buttonTint="#00C853"
             android:clickable="false"
             android:focusable="false" />
     </RelativeLayout>
@@ -35,7 +35,7 @@
         android:ellipsize="end"
         android:gravity="center"
         android:maxLines="1"
-        android:textColor="#1C2536"
+        android:textColor="#1E293B"
         android:textSize="12sp"
         android:textStyle="bold" />
 
@@ -44,6 +44,6 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center"
-        android:textColor="#7A889B"
+        android:textColor="#64748B"
         android:textSize="10sp" />
 </LinearLayout>

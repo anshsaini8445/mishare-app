@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F8F9FA"
+    android:background="#F8FAFC"
     android:orientation="vertical">
 
     <LinearLayout
@@ -19,32 +18,25 @@
             android:id="@+id/btnBack"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:padding="6dp"
             android:text="Back"
-            android:textColor="#1C2536"
+            android:textColor="#1E293B"
             android:textSize="16sp"
             android:textStyle="bold" />
 
         <TextView
+            android:id="@+id/tvSendTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
+            android:layout_marginStart="12dp"
             android:layout_weight="1"
-            android:text="Send"
-            android:textColor="#1C2536"
+            android:text="Select Files"
+            android:textColor="#1E293B"
             android:textSize="18sp"
             android:textStyle="bold" />
-
-        <EditText
-            android:id="@+id/etSearch"
-            android:layout_width="140dp"
-            android:layout_height="36dp"
-            android:background="#E5E9F2"
-            android:hint="Search"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:textSize="13sp" />
     </LinearLayout>
 
+    <!-- InShare Category Selector Tabs -->
     <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="46dp"
@@ -56,63 +48,73 @@
             android:layout_height="match_parent"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp">
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp">
 
             <TextView
                 android:id="@+id/tabApps"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
+                android:clickable="true"
+                android:focusable="true"
                 android:gravity="center"
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
                 android:text="Apps"
-                android:textColor="#00D59B"
+                android:textColor="#0078FF"
                 android:textSize="14sp"
                 android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/tabFiles"
-                android:layout_width="wrap_content"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:paddingStart="16dp"
-                android:paddingEnd="16dp"
-                android:text="Files"
-                android:textColor="#7A889B"
-                android:textSize="14sp" />
 
             <TextView
                 android:id="@+id/tabVideos"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
+                android:clickable="true"
+                android:focusable="true"
                 android:gravity="center"
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
                 android:text="Videos"
-                android:textColor="#7A889B"
+                android:textColor="#64748B"
                 android:textSize="14sp" />
 
             <TextView
                 android:id="@+id/tabPhotos"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
+                android:clickable="true"
+                android:focusable="true"
                 android:gravity="center"
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
                 android:text="Photos"
-                android:textColor="#7A889B"
+                android:textColor="#64748B"
                 android:textSize="14sp" />
 
             <TextView
                 android:id="@+id/tabSongs"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
+                android:clickable="true"
+                android:focusable="true"
                 android:gravity="center"
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
                 android:text="Music"
-                android:textColor="#7A889B"
+                android:textColor="#64748B"
+                android:textSize="14sp" />
+
+            <TextView
+                android:id="@+id/tabFiles"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
+                android:text="Files"
+                android:textColor="#64748B"
                 android:textSize="14sp" />
         </LinearLayout>
     </HorizontalScrollView>
@@ -128,17 +130,9 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="Installed Packages"
-            android:textColor="#1C2536"
+            android:textColor="#1E293B"
             android:textSize="14sp"
             android:textStyle="bold" />
-
-        <CheckBox
-            android:id="@+id/cbSelectAll"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:buttonTint="#00D59B"
-            android:text="Select All"
-            android:textSize="12sp" />
     </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
@@ -146,8 +140,9 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:padding="8dp" />
+        android:padding="6dp" />
 
+    <!-- Bottom Send Floating Bar -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="64dp"
@@ -162,18 +157,19 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="0 SELECTED"
-            android:textColor="#7A889B"
+            android:text="0 Selected"
+            android:textColor="#64748B"
             android:textSize="14sp"
             android:textStyle="bold" />
 
         <Button
             android:id="@+id/btnNext"
             android:layout_width="140dp"
-            android:layout_height="46dp"
-            android:backgroundTint="#00D59B"
-            android:text="NEXT"
+            android:layout_height="44dp"
+            android:backgroundTint="#00C853"
+            android:text="SEND"
             android:textColor="#FFFFFF"
+            android:textSize="15sp"
             android:textStyle="bold" />
     </LinearLayout>
 </LinearLayout>

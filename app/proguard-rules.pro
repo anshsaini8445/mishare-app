@@ -1,0 +1,5 @@
+-keep class com.proshare.app.** { *; }
+-keep class com.google.zxing.** { *; }
+-keep class com.journeyapps.** { *; }
+-dontwarn com.google.zxing.**
+-ignorewarnings

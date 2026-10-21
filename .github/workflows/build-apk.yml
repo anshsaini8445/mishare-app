@@ -1,4 +1,4 @@
-name: Build TurboShare APK
+name: Build APK and PlayStore AAB
 
 on:
   push:
@@ -19,16 +19,35 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: Generate Release Keystore for Play Store
+        run: |
+          keytool -genkey -v -keystore app/release-key.jks \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -alias upload -storepass hypershare123 -keypass hypershare123 \
+            -dname "CN=HyperShare, OU=Mobile, O=ProShare, L=Agra, S=UP, C=IN"
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.5'
 
-      - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+      - name: Build Debug APK, Release APK and Play Store AAB
+        run: gradle assembleDebug assembleRelease bundleRelease --stacktrace
 
-      - name: Upload APK
+      - name: Upload Phone Testing APK
         uses: actions/upload-artifact@v4
         with:
-          name: TurboShare-Pro-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: 1-Phone-Testing-APK
+          path: app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload Play Store AAB Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: 2-PlayStore-Upload-AAB
+          path: app/build/outputs/bundle/release/app-release.aab
+
+      - name: Upload Signing Keystore Backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: 3-PlayStore-Keystore-Save-This
+          path: app/release-key.jks

@@ -2,19 +2,10 @@ package com.proshare.app;
 
 import android.Manifest;
 import android.content.Intent;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
-import android.database.Cursor;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Color;
-import android.graphics.drawable.Drawable;
-import android.media.ThumbnailUtils;
-import android.net.Uri;
+import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Bundle;
-import android.provider.ContactsContract;
-import android.provider.MediaStore;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.Gravity;
@@ -22,25 +13,25 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
-import android.widget.ImageView;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executors;
 
 public class FilePickerActivity extends AppCompatActivity {
 
-    private LinearLayout gridContainer;
-    private Button btnSelectedCount;
+    private LinearLayout listContainer, subToggleRow;
+    private Button btnSelectedCount, btnNextSend;
     private EditText etSearch;
     private final List<AppSession.ShareItem> currentItems = new ArrayList<>();
-    private String currentTab = "VIDEOS";
+    private final List<Button> tabButtons = new ArrayList<>();
+    private String currentTab = "FILES";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -49,8 +40,8 @@ public class FilePickerActivity extends AppCompatActivity {
             currentTab = getIntent().getStringExtra("START_TAB");
         }
         requestPerms();
-        setContentView(buildPickerUi());
-        loadData(currentTab);
+        setContentView(buildSmoothPickerUi());
+        switchCategory(currentTab);
     }
 
     private void requestPerms() {
@@ -58,97 +49,116 @@ public class FilePickerActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(this, new String[]{
                     Manifest.permission.READ_MEDIA_VIDEO,
                     Manifest.permission.READ_MEDIA_IMAGES,
-                    Manifest.permission.READ_MEDIA_AUDIO,
-                    Manifest.permission.READ_CONTACTS
+                    Manifest.permission.READ_MEDIA_AUDIO
             }, 101);
         } else {
             ActivityCompat.requestPermissions(this, new String[]{
                     Manifest.permission.READ_EXTERNAL_STORAGE,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE,
-                    Manifest.permission.READ_CONTACTS
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
             }, 101);
         }
     }
 
-    private View buildPickerUi() {
+    private View buildSmoothPickerUi() {
         LinearLayout master = new LinearLayout(this);
         master.setOrientation(LinearLayout.VERTICAL);
-        master.setBackgroundColor(Color.parseColor("#070B14"));
-        master.setPadding(28, 35, 28, 25);
+        master.setBackgroundColor(Color.WHITE);
+
+        // 1. Top Bar: ← Send + Rounded Search Pill (Video 00:06)
+        LinearLayout topBar = new LinearLayout(this);
+        topBar.setOrientation(LinearLayout.HORIZONTAL);
+        topBar.setGravity(Gravity.CENTER_VERTICAL);
+        topBar.setPadding(35, 35, 35, 20);
+
+        TextView tvBack = UiHelper.makeTitle(this, "←  Send   ", "#0F172A", 20f);
+        UiHelper.attachSmoothBounce(tvBack);
+        tvBack.setOnClickListener(v -> finish());
 
         etSearch = new EditText(this);
-        etSearch.setHint("🔍 Search Videos, Photos, Songs, Apps, Contacts...");
-        etSearch.setHintTextColor(Color.parseColor("#64748B"));
-        etSearch.setTextColor(Color.WHITE);
-        etSearch.setBackground(UiHelper.bentoBox("#11192E", "#263554", 30, 2));
-        etSearch.setPadding(35, 25, 35, 25);
+        etSearch.setHint("🔍 Search files, videos, apps...");
+        etSearch.setHintTextColor(Color.parseColor("#94A3B8"));
+        etSearch.setTextColor(Color.parseColor("#0F172A"));
+        etSearch.setTextSize(14f);
+        etSearch.setBackground(UiHelper.box("#F1F5F9", 50));
+        etSearch.setPadding(40, 22, 40, 22);
+        etSearch.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         etSearch.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { renderBentoGrid(s.toString()); }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { renderFastList(s.toString()); }
             @Override public void afterTextChanged(Editable s) {}
         });
-        master.addView(etSearch);
 
+        topBar.addView(tvBack);
+        topBar.addView(etSearch);
+        master.addView(topBar);
+
+        // 2. Smooth Horizontal Tabs: History | Apps | Files | Videos | Photos | Songs (Video 00:07)
+        HorizontalScrollView tabScroll = new HorizontalScrollView(this);
+        tabScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout tabRow = new LinearLayout(this);
         tabRow.setOrientation(LinearLayout.HORIZONTAL);
-        tabRow.setPadding(0, 20, 0, 15);
+        tabRow.setPadding(25, 10, 25, 15);
 
-        String[] tabs = {"VIDEOS", "PHOTOS", "SONGS", "APPS", "CONTACTS"};
+        String[] tabs = {"HISTORY", "APPS", "FILES", "VIDEOS", "PHOTOS", "SONGS"};
         for (String t : tabs) {
             Button b = new Button(this);
             b.setText(t);
-            b.setTextSize(10f);
             b.setAllCaps(false);
-            b.setTextColor(Color.WHITE);
-            b.setBackground(UiHelper.bentoBox("#151E32", "#00F5D4", 24, 1));
-            UiHelper.enableTvFocus(b);
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, 105, 1f);
-            lp.setMargins(4, 0, 4, 0);
+            b.setTextSize(13f);
+            b.setTypeface(null, Typeface.BOLD);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, 100);
+            lp.setMargins(8, 0, 8, 0);
             b.setLayoutParams(lp);
-            b.setOnClickListener(v -> {
-                currentTab = t;
-                loadData(t);
-            });
+            b.setOnClickListener(v -> switchCategory(t));
+            tabButtons.add(b);
             tabRow.addView(b);
         }
-        master.addView(tabRow);
+        tabScroll.addView(tabRow);
+        master.addView(tabScroll);
 
-        Button btnAll = new Button(this);
-        btnAll.setText("☑ Select All in Tab");
-        btnAll.setAllCaps(false);
-        btnAll.setTextColor(Color.parseColor("#00F5D4"));
-        btnAll.setBackgroundColor(Color.TRANSPARENT);
-        btnAll.setOnClickListener(v -> {
-            for (AppSession.ShareItem item : currentItems) {
-                if (!AppSession.selectedQueue.contains(item)) AppSession.selectedQueue.add(item);
-            }
-            renderBentoGrid(etSearch.getText().toString());
-            updateCount();
-        });
-        master.addView(btnAll);
+        // 3. Green Pill Sub-Toggle: [ Installed | Packages ] or [ Received | Send ] (Video 00:06 & 00:07)
+        subToggleRow = new LinearLayout(this);
+        subToggleRow.setOrientation(LinearLayout.HORIZONTAL);
+        subToggleRow.setGravity(Gravity.CENTER);
+        subToggleRow.setPadding(50, 15, 50, 15);
+        master.addView(subToggleRow);
 
+        // 4. Instant Makkhan-Smooth File List
         ScrollView scroll = new ScrollView(this);
         scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-        gridContainer = new LinearLayout(this);
-        gridContainer.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(gridContainer);
+        listContainer = new LinearLayout(this);
+        listContainer.setOrientation(LinearLayout.VERTICAL);
+        listContainer.setPadding(35, 10, 35, 30);
+        scroll.addView(listContainer);
         master.addView(scroll);
 
+        // 5. Bottom Selection Bar: [ 0 SELECTED ]  [ NEXT / SEND ] (Video 00:08)
         LinearLayout bottomBar = new LinearLayout(this);
         bottomBar.setOrientation(LinearLayout.HORIZONTAL);
-        bottomBar.setPadding(0, 20, 0, 5);
+        bottomBar.setPadding(35, 22, 35, 22);
+        bottomBar.setBackground(UiHelper.bentoBox("#FFFFFF", "#E2E8F0", 0, 2));
 
-        btnSelectedCount = UiHelper.makeBtn(this, "0 SELECTED", "#11192E", "#00F5D4");
-        btnSelectedCount.setLayoutParams(new LinearLayout.LayoutParams(0, 135, 1f));
+        btnSelectedCount = new Button(this);
+        btnSelectedCount.setText("0 SELECTED");
+        btnSelectedCount.setAllCaps(false);
+        btnSelectedCount.setTextColor(Color.parseColor("#64748B"));
+        btnSelectedCount.setBackground(UiHelper.bentoBox("#FFFFFF", "#CBD5E1", 60, 2));
+        btnSelectedCount.setLayoutParams(new LinearLayout.LayoutParams(0, 130, 1f));
 
-        View sp = new View(this);
-        sp.setLayoutParams(new LinearLayout.LayoutParams(20, 10));
+        View gap = new View(this);
+        gap.setLayoutParams(new LinearLayout.LayoutParams(30, 10));
 
-        Button btnNext = UiHelper.makeBtn(this, "TURBO SEND ➔", "#00F5D4", "#070B14");
-        btnNext.setLayoutParams(new LinearLayout.LayoutParams(0, 135, 1f));
-        btnNext.setOnClickListener(v -> {
+        btnNextSend = new Button(this);
+        btnNextSend.setText("NEXT");
+        btnNextSend.setAllCaps(false);
+        btnNextSend.setTextColor(Color.WHITE);
+        btnNextSend.setTypeface(null, Typeface.BOLD);
+        btnNextSend.setBackground(UiHelper.box("#16CC3E", 60));
+        btnNextSend.setLayoutParams(new LinearLayout.LayoutParams(0, 130, 1f));
+        UiHelper.attachSmoothBounce(btnNextSend);
+        btnNextSend.setOnClickListener(v -> {
             if (AppSession.selectedQueue.isEmpty()) {
-                Toast.makeText(this, "Select at least 1 file first!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Please select at least 1 item to share!", Toast.LENGTH_SHORT).show();
                 return;
             }
             Intent i = new Intent(this, ConnectTransferActivity.class);
@@ -157,178 +167,128 @@ public class FilePickerActivity extends AppCompatActivity {
         });
 
         bottomBar.addView(btnSelectedCount);
-        bottomBar.addView(sp);
-        bottomBar.addView(btnNext);
+        bottomBar.addView(gap);
+        bottomBar.addView(btnNextSend);
         master.addView(bottomBar);
 
-        updateCount();
+        updateBottomBar();
         return master;
     }
 
-    private void loadData(String tab) {
-        currentItems.clear();
-        try {
-            if ("APPS".equals(tab)) {
-                PackageManager pm = getPackageManager();
-                for (ApplicationInfo app : pm.getInstalledApplications(0)) {
-                    if ((app.flags & ApplicationInfo.FLAG_SYSTEM) == 0 && app.sourceDir != null) {
-                        File f = new File(app.sourceDir);
-                        currentItems.add(new AppSession.ShareItem(pm.getApplicationLabel(app).toString() + ".apk", f.getAbsolutePath(), f.length(), "APPS"));
-                    }
-                }
-            } else if ("CONTACTS".equals(tab)) {
-                try (Cursor c = getContentResolver().query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                        new String[]{ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER}, null, null, null)) {
-                    if (c != null) {
-                        int count = 0;
-                        File vcfDir = new File(getCacheDir(), "vcf");
-                        if (!vcfDir.exists()) vcfDir.mkdirs();
-                        while (c.moveToNext() && count < 60) {
-                            String name = c.getString(0);
-                            String num = c.getString(1);
-                            if (name != null && num != null) {
-                                File vcf = new File(vcfDir, name.replaceAll("[^a-zA-Z0-9]", "_") + ".vcf");
-                                String vcard = "BEGIN:VCARD\nVERSION:3.0\nFN:" + name + "\nTEL:" + num + "\nEND:VCARD";
-                                try (FileOutputStream fos = new FileOutputStream(vcf)) {
-                                    fos.write(vcard.getBytes());
-                                }
-                                currentItems.add(new AppSession.ShareItem(name + " (" + num + ").vcf", vcf.getAbsolutePath(), vcf.length(), "CONTACTS"));
-                                count++;
-                            }
-                        }
-                    }
-                }
-            } else {
-                Uri uri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
-                if ("PHOTOS".equals(tab)) uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
-                else if ("SONGS".equals(tab)) uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
-
-                String[] proj = {MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.SIZE};
-                try (Cursor c = getContentResolver().query(uri, proj, null, null, MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
-                    if (c != null) {
-                        int count = 0;
-                        while (c.moveToNext() && count < 60) {
-                            String name = c.getString(0);
-                            String path = c.getString(1);
-                            long size = c.getLong(2);
-                            if (path != null && new File(path).exists() && size > 0) {
-                                currentItems.add(new AppSession.ShareItem(name != null ? name : "Media_" + count, path, size, tab));
-                                count++;
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (Exception ignored) {}
-        renderBentoGrid(etSearch.getText().toString());
-    }
-
-    private void renderBentoGrid(String query) {
-        gridContainer.removeAllViews();
-        String q = query.toLowerCase().trim();
-        List<AppSession.ShareItem> filtered = new ArrayList<>();
-        for (AppSession.ShareItem it : currentItems) {
-            if (q.isEmpty() || it.name.toLowerCase().contains(q)) filtered.add(it);
+    private void switchCategory(String tab) {
+        currentTab = tab;
+        for (Button b : tabButtons) {
+            boolean active = b.getText().toString().equals(tab);
+            b.setTextColor(Color.parseColor(active ? "#16CC3E" : "#475569"));
+            b.setBackground(UiHelper.box(active ? "#E8F8EE" : "#F8FAFC", 40));
         }
 
-        for (int i = 0; i < filtered.size(); i += 2) {
-            LinearLayout row = new LinearLayout(this);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(-1, -2);
-            rLp.bottomMargin = 18;
-            row.setLayoutParams(rLp);
+        // Update Green Pill Toggle (Installed/Packages or Received/Send)
+        subToggleRow.removeAllViews();
+        String leftLabel = "APPS".equals(tab) ? "Installed" : ("HISTORY".equals(tab) ? "Received" : "All " + tab);
+        String rightLabel = "APPS".equals(tab) ? "Packages" : ("HISTORY".equals(tab) ? "Send" : "Select All");
 
-            row.addView(createThumbnailCard(filtered.get(i)));
+        Button bLeft = new Button(this);
+        bLeft.setText(leftLabel);
+        bLeft.setAllCaps(false);
+        bLeft.setTextColor(Color.WHITE);
+        bLeft.setBackground(UiHelper.box("#16CC3E", 45));
+        bLeft.setLayoutParams(new LinearLayout.LayoutParams(0, 95, 1f));
 
-            View space = new View(this);
-            space.setLayoutParams(new LinearLayout.LayoutParams(18, 10));
-            row.addView(space);
-
-            if (i + 1 < filtered.size()) {
-                row.addView(createThumbnailCard(filtered.get(i + 1)));
-            } else {
-                View dummy = new View(this);
-                dummy.setLayoutParams(new LinearLayout.LayoutParams(0, 10, 1f));
-                row.addView(dummy);
-            }
-            gridContainer.addView(row);
-        }
-    }
-
-    @SuppressWarnings("deprecation")
-    private View createThumbnailCard(AppSession.ShareItem item) {
-        boolean isSel = AppSession.selectedQueue.contains(item);
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setGravity(Gravity.CENTER_HORIZONTAL);
-        card.setBackground(UiHelper.bentoBox("#11192E", isSel ? "#00F5D4" : "#1E293B", 30, isSel ? 4 : 2));
-        card.setPadding(20, 22, 20, 22);
-        UiHelper.enableTvFocus(card);
-        card.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-        ImageView thumb = new ImageView(this);
-        thumb.setLayoutParams(new LinearLayout.LayoutParams(130, 130));
-        thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
-
-        try {
-            if ("APPS".equals(item.category)) {
-                PackageManager pm = getPackageManager();
-                Drawable icon = pm.getPackageArchiveInfo(item.path, 0) != null
-                        ? pm.getPackageArchiveInfo(item.path, 0).applicationInfo.loadIcon(pm)
-                        : getApplicationInfo().loadIcon(pm);
-                thumb.setImageDrawable(icon);
-            } else if ("VIDEOS".equals(item.category)) {
-                Bitmap bmp = ThumbnailUtils.createVideoThumbnail(item.path, MediaStore.Video.Thumbnails.MICRO_KIND);
-                if (bmp != null) thumb.setImageBitmap(bmp);
-                else thumb.setBackground(UiHelper.box("#A855F7", 25));
-            } else if ("PHOTOS".equals(item.category)) {
-                BitmapFactory.Options opts = new BitmapFactory.Options();
-                opts.inSampleSize = 8; // Memory safe for Android 5 to 16
-                Bitmap bmp = BitmapFactory.decodeFile(item.path, opts);
-                if (bmp != null) thumb.setImageBitmap(bmp);
-                else thumb.setBackground(UiHelper.box("#38BDF8", 25));
-            } else {
-                thumb.setBackground(UiHelper.box("#10B981", 65));
-            }
-        } catch (Throwable t) {
-            thumb.setBackground(UiHelper.box("#1E293B", 25));
-        }
-
-        TextView tvName = new TextView(this);
-        tvName.setText(item.name);
-        tvName.setMaxLines(1);
-        tvName.setTextColor(Color.WHITE);
-        tvName.setTextSize(12f);
-        tvName.setPadding(0, 12, 0, 4);
-
-        TextView tvSize = new TextView(this);
-        tvSize.setText(AppSession.formatSize(item.size));
-        tvSize.setTextColor(Color.parseColor("#38BDF8"));
-        tvSize.setTextSize(11f);
-
-        CheckBox cb = new CheckBox(this);
-        cb.setChecked(isSel);
-        cb.setOnCheckedChangeListener((b, checked) -> {
-            if (checked) {
+        Button bRight = new Button(this);
+        bRight.setText(rightLabel);
+        bRight.setAllCaps(false);
+        bRight.setTextColor(Color.parseColor("#16CC3E"));
+        bRight.setBackground(UiHelper.bentoBox("#FFFFFF", "#16CC3E", 45, 2));
+        bRight.setLayoutParams(new LinearLayout.LayoutParams(0, 95, 1f));
+        bRight.setOnClickListener(v -> {
+            for (AppSession.ShareItem item : currentItems) {
                 if (!AppSession.selectedQueue.contains(item)) AppSession.selectedQueue.add(item);
-            } else {
-                AppSession.selectedQueue.remove(item);
             }
-            card.setBackground(UiHelper.bentoBox("#11192E", checked ? "#00F5D4" : "#1E293B", 30, checked ? 4 : 2));
-            updateCount();
+            renderFastList(etSearch.getText().toString());
+            updateBottomBar();
         });
 
-        card.setOnClickListener(v -> cb.setChecked(!cb.isChecked()));
-        card.addView(thumb);
-        card.addView(tvName);
-        card.addView(tvSize);
-        card.addView(cb);
-        return card;
+        subToggleRow.addView(bLeft);
+        subToggleRow.addView(bRight);
+
+        // Load instantaneously from RAM Cache, or fetch on background thread
+        String queryTab = "HISTORY".equals(tab) ? "FILES" : tab;
+        if (AppSession.ramCache.containsKey(queryTab)) {
+            currentItems.clear();
+            currentItems.addAll(AppSession.ramCache.get(queryTab));
+            renderFastList(etSearch.getText().toString());
+        } else {
+            Executors.newSingleThreadExecutor().execute(() -> {
+                List<AppSession.ShareItem> loaded = AppSession.getCategoryItems(this, queryTab);
+                runOnUiThread(() -> {
+                    currentItems.clear();
+                    currentItems.addAll(loaded);
+                    renderFastList(etSearch.getText().toString());
+                });
+            });
+        }
     }
 
-    private void updateCount() {
-        long bytes = 0;
-        for (AppSession.ShareItem i : AppSession.selectedQueue) bytes += i.size;
-        btnSelectedCount.setText(AppSession.selectedQueue.size() + " (" + AppSession.formatSize(bytes) + ")");
+    private void renderFastList(String query) {
+        listContainer.removeAllViews();
+        String q = query.toLowerCase().trim();
+
+        for (AppSession.ShareItem item : currentItems) {
+            if (!q.isEmpty() && !item.name.toLowerCase().contains(q)) continue;
+
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(20, 22, 20, 22);
+            row.setBackground(UiHelper.bentoBox("#FFFFFF", "#F1F5F9", 28, 2));
+            LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(-1, -2);
+            rLp.bottomMargin = 14;
+            row.setLayoutParams(rLp);
+
+            // Clean File Icon Badge (Like Yellow File Icon in Video 00:08)
+            TextView iconBadge = UiHelper.makeTitle(this, "APPS".equals(item.category) ? "📦" : ("VIDEOS".equals(item.category) ? "🎬" : "📁"), "#FFFFFF", 18f);
+            iconBadge.setGravity(Gravity.CENTER);
+            iconBadge.setBackground(UiHelper.box("#FACC15", 22));
+            iconBadge.setLayoutParams(new LinearLayout.LayoutParams(105, 105));
+
+            LinearLayout textCol = new LinearLayout(this);
+            textCol.setOrientation(LinearLayout.VERTICAL);
+            textCol.setPadding(28, 0, 15, 0);
+            textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+            TextView tvName = UiHelper.makeTitle(this, item.name, "#0F172A", 14.5f);
+            tvName.setMaxLines(1);
+            TextView tvSize = new TextView(this);
+            tvSize.setText(AppSession.formatSize(item.size));
+            tvSize.setTextColor(Color.parseColor("#94A3B8"));
+            tvSize.setTextSize(12.5f);
+            textCol.addView(tvName);
+            textCol.addView(tvSize);
+
+            CheckBox cb = new CheckBox(this);
+            cb.setChecked(AppSession.selectedQueue.contains(item));
+            cb.setOnCheckedChangeListener((b, checked) -> {
+                if (checked) {
+                    if (!AppSession.selectedQueue.contains(item)) AppSession.selectedQueue.add(item);
+                } else {
+                    AppSession.selectedQueue.remove(item);
+                }
+                updateBottomBar();
+            });
+
+            row.setOnClickListener(v -> cb.setChecked(!cb.isChecked()));
+            row.addView(iconBadge);
+            row.addView(textCol);
+            row.addView(cb);
+            listContainer.addView(row);
+        }
+    }
+
+    private void updateBottomBar() {
+        int count = AppSession.selectedQueue.size();
+        btnSelectedCount.setText(count + " SELECTED");
+        btnSelectedCount.setTextColor(Color.parseColor(count > 0 ? "#16CC3E" : "#64748B"));
+        btnNextSend.setText(count > 0 ? "SEND" : "NEXT");
     }
 }

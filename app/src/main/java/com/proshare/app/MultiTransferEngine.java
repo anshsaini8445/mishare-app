@@ -1,16 +1,20 @@
 package com.proshare.app;
 
+import android.app.ActivityManager;
 import android.content.Context;
 import android.net.wifi.WifiManager;
 import android.os.Build;
+import android.os.PowerManager;
 import android.text.format.Formatter;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -18,9 +22,6 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
-import java.nio.channels.WritableByteChannel;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -30,12 +31,14 @@ public class MultiTransferEngine {
     public static final int PORT = 9091;
     public static final int RADAR_PORT = 9092;
     public static final int WEB_PORT = 8080;
-    private static final int BUFFER = 524288; // 512 KB Hardware Buffer
 
-    private final ExecutorService pool = Executors.newCachedThreadPool();
+    private final ExecutorService pool = Executors.newFixedThreadPool(8);
     private volatile boolean active = true;
     private ServerSocket serverSocket;
+    private ServerSocket webSocket;
     private DatagramSocket radarSocket;
+    private WifiManager.WifiLock wifiLock;
+    private PowerManager.WakeLock wakeLock;
 
     public interface Callback {
         void onRadarFound(String model, String ip);
@@ -44,10 +47,47 @@ public class MultiTransferEngine {
         void onError(String err);
     }
 
+    // Dynamic Buffer Scaling for Android 5 (Low RAM) to Android 16 (High RAM)
+    public static int getDynamicBufferSize(Context ctx) {
+        try {
+            ActivityManager am = (ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
+            ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+            if (am != null) {
+                am.getMemoryInfo(mi);
+                long freeMb = mi.availMem / (1024 * 1024);
+                if (freeMb > 1500) return 2097152; // 2 MB Turbo Buffer
+                if (freeMb > 700) return 1048576;  // 1 MB Fast Buffer
+                if (freeMb > 350) return 524288;   // 512 KB Standard Buffer
+            }
+        } catch (Exception ignored) {}
+        return 262144; // 256 KB Safe Buffer for Old Android 5 Devices
+    }
+
+    private void acquireHardwareLocks(Context ctx) {
+        try {
+            WifiManager wm = (WifiManager) ctx.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm != null && wifiLock == null) {
+                int lockMode = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                        ? WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+                        : WifiManager.WIFI_MODE_FULL_HIGH_PERF;
+                wifiLock = wm.createWifiLock(lockMode, "HyperShare::TurboWifiLock");
+                wifiLock.acquire();
+            }
+            PowerManager pm = (PowerManager) ctx.getApplicationContext().getSystemService(Context.POWER_SERVICE);
+            if (pm != null && wakeLock == null) {
+                wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "HyperShare::TurboCpuLock");
+                wakeLock.acquire(30 * 60 * 1000L);
+            }
+        } catch (Exception ignored) {}
+    }
+
     public void stop() {
         active = false;
         try { if (serverSocket != null) serverSocket.close(); } catch (Exception ignored) {}
+        try { if (webSocket != null) webSocket.close(); } catch (Exception ignored) {}
         try { if (radarSocket != null) radarSocket.close(); } catch (Exception ignored) {}
+        try { if (wifiLock != null && wifiLock.isHeld()) wifiLock.release(); } catch (Exception ignored) {}
+        try { if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); } catch (Exception ignored) {}
     }
 
     public void broadcastReceiverRadar(String myIp) {
@@ -59,7 +99,7 @@ public class MultiTransferEngine {
                 while (active) {
                     DatagramPacket pkt = new DatagramPacket(msg, msg.length, InetAddress.getByName("255.255.255.255"), RADAR_PORT);
                     radarSocket.send(pkt);
-                    Thread.sleep(1000);
+                    Thread.sleep(900);
                 }
             } catch (Exception ignored) {}
         });
@@ -83,18 +123,22 @@ public class MultiTransferEngine {
     }
 
     public void sendFiles(Context ctx, String targetIp, List<AppSession.ShareItem> list, Callback cb) {
+        acquireHardwareLocks(ctx);
+        final int dynBuffer = getDynamicBufferSize(ctx);
+
         pool.execute(() -> {
             Socket soc = new Socket();
             try {
                 soc.setTcpNoDelay(true);
                 soc.setKeepAlive(true);
-                soc.setSendBufferSize(BUFFER * 2);
-                soc.connect(new InetSocketAddress(targetIp, PORT), 6000);
+                soc.setTrafficClass(0x10 | 0x08);
+                soc.setSendBufferSize(dynBuffer * 2);
+                soc.connect(new InetSocketAddress(targetIp, PORT), 7000);
 
-                DataOutputStream dos = new DataOutputStream(new BufferedOutputStream(soc.getOutputStream(), BUFFER));
+                DataOutputStream dos = new DataOutputStream(new BufferedOutputStream(soc.getOutputStream(), dynBuffer));
                 dos.writeInt(list.size());
                 long totalBytes = 0;
-                byte[] buf = new byte[BUFFER];
+                byte[] buf = new byte[dynBuffer];
 
                 for (int i = 0; i < list.size(); i++) {
                     AppSession.ShareItem item = list.get(i);
@@ -103,7 +147,7 @@ public class MultiTransferEngine {
                     dos.writeUTF(item.name);
                     dos.writeLong(len);
 
-                    try (BufferedInputStream bis = new BufferedInputStream(new FileInputStream(f), BUFFER)) {
+                    try (BufferedInputStream bis = new BufferedInputStream(new FileInputStream(f), dynBuffer)) {
                         long sent = 0;
                         int r;
                         long t0 = System.currentTimeMillis();
@@ -130,24 +174,28 @@ public class MultiTransferEngine {
     }
 
     public void startReceiver(Context ctx, File dir, Callback cb) {
+        acquireHardwareLocks(ctx);
+        final int dynBuffer = getDynamicBufferSize(ctx);
+
         pool.execute(() -> {
             try {
                 serverSocket = new ServerSocket(PORT);
-                serverSocket.setReceiveBufferSize(BUFFER * 2);
+                serverSocket.setReceiveBufferSize(dynBuffer * 2);
                 while (active) {
                     Socket client = serverSocket.accept();
                     client.setTcpNoDelay(true);
-                    DataInputStream dis = new DataInputStream(new BufferedInputStream(client.getInputStream(), BUFFER));
+                    client.setTrafficClass(0x10 | 0x08);
+                    DataInputStream dis = new DataInputStream(new BufferedInputStream(client.getInputStream(), dynBuffer));
                     int count = dis.readInt();
                     long totalBytes = 0;
-                    byte[] buf = new byte[BUFFER];
+                    byte[] buf = new byte[dynBuffer];
                     if (!dir.exists()) dir.mkdirs();
 
                     for (int i = 0; i < count; i++) {
                         String name = dis.readUTF();
                         long len = dis.readLong();
                         File out = new File(dir, name);
-                        try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(out), BUFFER)) {
+                        try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(out), dynBuffer)) {
                             long rec = 0;
                             int r;
                             long t0 = System.currentTimeMillis();
@@ -174,24 +222,78 @@ public class MultiTransferEngine {
         });
     }
 
+    // REAL DOWNLOADABLE HTTP SERVER FOR SMART LED TV, PC, LAPTOP & iPHONE
     public void startWebServer() {
         pool.execute(() -> {
-            try (ServerSocket ws = new ServerSocket(WEB_PORT)) {
+            try {
+                if (webSocket != null && !webSocket.isClosed()) return;
+                webSocket = new ServerSocket(WEB_PORT);
                 while (active) {
-                    Socket c = ws.accept();
-                    OutputStream out = c.getOutputStream();
-                    String html = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n"
-                            + "<html><body style='background:#0B0F19;color:#00F5D4;font-family:sans-serif;text-align:center;padding:30px;'>"
-                            + "<h2>HyperShare Pro - PC / iOS / Jio Web Share</h2>"
-                            + "<p style='color:white;'>Connected Device: " + Build.MODEL + "</p>"
-                            + "<p style='color:white;'>Files Queued: " + AppSession.selectedQueue.size() + "</p>"
-                            + "</body></html>";
-                    out.write(html.getBytes());
-                    out.flush();
-                    c.close();
+                    final Socket client = webSocket.accept();
+                    pool.execute(() -> handleWebClient(client));
                 }
             } catch (Exception ignored) {}
         });
+    }
+
+    private void handleWebClient(Socket client) {
+        try {
+            BufferedReader reader = new BufferedReader(new InputStreamReader(client.getInputStream()));
+            OutputStream out = client.getOutputStream();
+            String requestLine = reader.readLine();
+
+            if (requestLine != null && requestLine.startsWith("GET /download/")) {
+                String[] parts = requestLine.split(" ");
+                int idx = Integer.parseInt(parts[1].replace("/download/", "").trim());
+                if (idx >= 0 && idx < AppSession.selectedQueue.size()) {
+                    AppSession.ShareItem item = AppSession.selectedQueue.get(idx);
+                    File file = new File(item.path);
+                    if (file.exists()) {
+                        String header = "HTTP/1.1 200 OK\r\n"
+                                + "Content-Type: application/octet-stream\r\n"
+                                + "Content-Length: " + file.length() + "\r\n"
+                                + "Content-Disposition: attachment; filename=\"" + item.name + "\"\r\n\r\n";
+                        out.write(header.getBytes());
+                        try (FileInputStream fis = new FileInputStream(file)) {
+                            byte[] buf = new byte[262144];
+                            int r;
+                            while ((r = fis.read(buf)) != -1) {
+                                out.write(buf, 0, r);
+                            }
+                        }
+                        out.flush();
+                        client.close();
+                        return;
+                    }
+                }
+            }
+
+            // Build Bento Grid Download Page for LED TV, PC & Laptop Browsers
+            StringBuilder rows = new StringBuilder();
+            if (AppSession.selectedQueue.isEmpty()) {
+                rows.append("<p style='color:#FACC15;font-size:18px;'>No files selected yet! Go to SEND tab in phone to add Videos, Apps or Files.</p>");
+            } else {
+                for (int i = 0; i < AppSession.selectedQueue.size(); i++) {
+                    AppSession.ShareItem it = AppSession.selectedQueue.get(i);
+                    rows.append("<div style='background:#151E32;border:1px solid #00F5D4;border-radius:16px;padding:18px;margin:14px auto;max-width:600px;display:flex;justify-content:space-between;align-items:center;'>")
+                        .append("<div style='text-align:left;color:white;'><b>").append(it.name).append("</b><br><span style='color:#38BDF8;font-size:13px;'>").append(AppSession.formatSize(it.size)).append("</span></div>")
+                        .append("<a href='/download/").append(i).append("' style='background:#00F5D4;color:#070B14;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:bold;'>⬇ DOWNLOAD</a>")
+                        .append("</div>");
+                }
+            }
+
+            String html = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n"
+                    + "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head>"
+                    + "<body style='background:#070B14;color:#00F5D4;font-family:sans-serif;text-align:center;padding:25px;'>"
+                    + "<div style='border:2px solid #00F5D4;border-radius:24px;padding:25px;background:#11192E;max-width:700px;margin:auto;'>"
+                    + "<h1>⚡ HyperShare X - TV / PC / Laptop Hub</h1>"
+                    + "<p style='color:#94A3B8;'>Connected to: <b style='color:white;'>" + Build.MODEL + "</b> (2.4GHz / 5GHz High-Speed Stream)</p>"
+                    + rows.toString()
+                    + "</div></body></html>";
+            out.write(html.getBytes("UTF-8"));
+            out.flush();
+            client.close();
+        } catch (Exception ignored) {}
     }
 
     @SuppressWarnings("deprecation")

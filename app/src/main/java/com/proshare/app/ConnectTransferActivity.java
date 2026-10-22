@@ -12,7 +12,6 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
-import android.widget.Switch;
 import android.widget.TextView;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.appcompat.app.AppCompatActivity;
@@ -26,9 +25,10 @@ public class ConnectTransferActivity extends AppCompatActivity {
 
     private MultiTransferEngine engine;
     private WifiDirectEngine p2pEngine;
-    private TextView tvStatus, tvSpeed, tvRadar;
+    private TextView tvStatus, tvSpeed, tvRadarPopup;
     private ProgressBar bar;
     private EditText etIp;
+    private UiHelper.LiveSpeedGraphView speedGraph;
 
     private final ActivityResultLauncher<ScanOptions> scanner =
             registerForActivityResult(new ScanContract(), res -> {
@@ -44,6 +44,7 @@ public class ConnectTransferActivity extends AppCompatActivity {
         engine = new MultiTransferEngine();
         p2pEngine = new WifiDirectEngine();
         p2pEngine.initFastP2p(this);
+        engine.startWebServer(); // Also activates TV / PC / Laptop Browser Download simultaneously!
 
         ActivityCompat.requestPermissions(this, new String[]{
                 Manifest.permission.CAMERA,
@@ -53,50 +54,65 @@ public class ConnectTransferActivity extends AppCompatActivity {
 
         String mode = getIntent().getStringExtra("MODE");
         ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(Color.parseColor("#0B0F19"));
+        scroll.setBackgroundColor(Color.parseColor("#070B14"));
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(40, 40, 40, 40);
+        root.setPadding(35, 40, 35, 40);
 
-        root.addView(UiHelper.makeTitle(this, "RECEIVE".equals(mode) ? "📥 Waiting for Sender..." : "🚀 Connect to Receiver...", "#00F5D4", 22f));
+        root.addView(UiHelper.makeTitle(this, "RECEIVE".equals(mode) ? "📡 2.4GHz / 5GHz Receiver Active" : "⚡ Auto-Radar (Phone • TV • PC)", "#00F5D4", 20f));
         root.addView(PermissionBox.build(this));
+
+        String myIp = MultiTransferEngine.getLocalIp(this);
 
         if ("RECEIVE".equals(mode)) {
             p2pEngine.createFastGroup();
-            String myIp = MultiTransferEngine.getLocalIp(this);
 
-            LinearLayout qrBox = new LinearLayout(this);
-            qrBox.setOrientation(LinearLayout.VERTICAL);
-            qrBox.setGravity(Gravity.CENTER);
-            qrBox.setBackground(UiHelper.box("#FFFFFF", 35));
-            qrBox.setPadding(30, 30, 30, 30);
+            LinearLayout qrBento = new LinearLayout(this);
+            qrBento.setOrientation(LinearLayout.VERTICAL);
+            qrBento.setGravity(Gravity.CENTER);
+            qrBento.setBackground(UiHelper.bentoBox("#FFFFFF", "#00F5D4", 38, 6));
+            qrBento.setPadding(30, 30, 30, 30);
+            LinearLayout.LayoutParams qLp = new LinearLayout.LayoutParams(-1, -2);
+            qLp.topMargin = 25;
+            qrBento.setLayoutParams(qLp);
 
-            TextView modelTv = UiHelper.makeTitle(this, Build.MODEL + " (" + myIp + ")", "#0B0F19", 16f);
+            qrBento.addView(UiHelper.makeTitle(this, Build.MODEL + " • IP: " + myIp, "#070B14", 16f));
+            TextView bandInfo = new TextView(this);
+            bandInfo.setText(p2pEngine.getBandStatus(this));
+            bandInfo.setTextColor(Color.parseColor("#2563EB"));
+            qrBento.addView(bandInfo);
+
             ImageView qrView = new ImageView(this);
             qrView.setImageBitmap(QrGenerator.createAutoQr(myIp));
-
-            Switch fastMode = new Switch(this);
-            fastMode.setText("⚡ Fast Mode (5GHz / Wi-Fi 6)");
-            fastMode.setChecked(true);
-            fastMode.setTextColor(Color.BLACK);
-
-            qrBox.addView(modelTv);
-            qrBox.addView(qrView);
-            qrBox.addView(fastMode);
-            root.addView(qrBox);
+            qrBento.addView(qrView);
+            root.addView(qrBento);
 
             engine.broadcastReceiverRadar(myIp);
             File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "HyperShare");
             engine.startReceiver(this, dir, callback("Receiving"));
         } else {
-            Button scanBtn = UiHelper.makeBtn(this, "📷 SCAN RECEIVER QR CODE", "#00F5D4", "#0B0F19");
+            LinearLayout radarBento = new LinearLayout(this);
+            radarBento.setOrientation(LinearLayout.VERTICAL);
+            radarBento.setGravity(Gravity.CENTER);
+            radarBento.setBackground(UiHelper.bentoBox("#11192E", "#38BDF8", 38, 2));
+            radarBento.setPadding(30, 30, 30, 30);
+            LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(-1, -2);
+            rLp.topMargin = 25;
+            radarBento.setLayoutParams(rLp);
+
+            UiHelper.RadarSweepView radarView = new UiHelper.RadarSweepView(this);
+            radarView.setLayoutParams(new LinearLayout.LayoutParams(320, 320));
+            radarBento.addView(radarView);
+
+            tvRadarPopup = UiHelper.makeTitle(this, "🔍 Scanning 2.4GHz & 5GHz Devices...\n📺 For LED TV / PC: Open http://" + myIp + ":8080", "#38BDF8", 13.5f);
+            tvRadarPopup.setPadding(15, 20, 15, 10);
+            radarBento.addView(tvRadarPopup);
+            root.addView(radarBento);
+
+            Button scanBtn = UiHelper.makeBtn(this, "📷 Scan Receiver QR Code", "#1E293B", "#00F5D4");
             scanBtn.setOnClickListener(v -> scanner.launch(new ScanOptions().setOrientationLocked(true)));
             root.addView(scanBtn);
-
-            tvRadar = UiHelper.makeTitle(this, "📡 Searching receiver on Radar...", "#38BDF8", 15f);
-            tvRadar.setPadding(15, 25, 15, 25);
-            root.addView(tvRadar);
 
             etIp = new EditText(this);
             etIp.setHint("Or Enter Receiver IP (e.g. 192.168.43.1)");
@@ -104,7 +120,7 @@ public class ConnectTransferActivity extends AppCompatActivity {
             etIp.setTextColor(Color.WHITE);
             root.addView(etIp);
 
-            Button manualBtn = UiHelper.makeBtn(this, "🚀 CONNECT & SEND NOW", "#2563EB", "#FFFFFF");
+            Button manualBtn = UiHelper.makeBtn(this, "🚀 CONNECT & SEND (2.4G / 5G)", "#2563EB", "#FFFFFF");
             manualBtn.setOnClickListener(v -> {
                 String ip = etIp.getText().toString().trim();
                 if (!ip.isEmpty()) startSend(ip);
@@ -113,14 +129,30 @@ public class ConnectTransferActivity extends AppCompatActivity {
             startRadarListen();
         }
 
-        tvSpeed = UiHelper.makeTitle(this, "⚡ 0.0 Mbps", "#FACC15", 28f);
+        LinearLayout speedBento = new LinearLayout(this);
+        speedBento.setOrientation(LinearLayout.VERTICAL);
+        speedBento.setBackground(UiHelper.bentoBox("#11192E", "#00F5D4", 38, 2));
+        speedBento.setPadding(35, 30, 35, 30);
+        LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(-1, -2);
+        sLp.topMargin = 30;
+        speedBento.setLayoutParams(sLp);
+
+        tvSpeed = UiHelper.makeTitle(this, "⚡ 0.0 Mbps", "#00F5D4", 28f);
+        speedBento.addView(tvSpeed);
+
+        speedGraph = new UiHelper.LiveSpeedGraphView(this);
+        speedGraph.setLayoutParams(new LinearLayout.LayoutParams(-1, 150));
+        speedBento.addView(speedGraph);
+
         bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         bar.setMax(100);
-        tvStatus = UiHelper.makeTitle(this, "Engine Ready (Zero-Cancel Mode)", "#FFFFFF", 14f);
+        speedBento.addView(bar);
 
-        root.addView(tvSpeed);
-        root.addView(bar);
-        root.addView(tvStatus);
+        tvStatus = UiHelper.makeTitle(this, "Ready • Works on 2.4GHz, 5GHz & Wi-Fi 6", "#CBD5E1", 13f);
+        tvStatus.setPadding(0, 12, 0, 0);
+        speedBento.addView(tvStatus);
+
+        root.addView(speedBento);
         scroll.addView(root);
         setContentView(scroll);
     }
@@ -129,8 +161,9 @@ public class ConnectTransferActivity extends AppCompatActivity {
         engine.scanRadar(new MultiTransferEngine.Callback() {
             @Override public void onRadarFound(String name, String ip) {
                 runOnUiThread(() -> {
-                    tvRadar.setText("🟢 Found: " + name + " (" + ip + ") [TAP TO SEND]");
-                    tvRadar.setOnClickListener(v -> startSend(ip));
+                    tvRadarPopup.setText("🟢 DEVICE FOUND: " + name + " (" + ip + ")\n👉 TAP HERE FOR ZERO-CLICK SEND!");
+                    tvRadarPopup.setTextColor(Color.parseColor("#00F5D4"));
+                    tvRadarPopup.setOnClickListener(v -> startSend(ip));
                 });
             }
             @Override public void onProgress(String f, int i, int t, int p, double s) {}
@@ -140,7 +173,7 @@ public class ConnectTransferActivity extends AppCompatActivity {
     }
 
     private void startSend(String ip) {
-        tvStatus.setText("Connecting to " + ip + "...");
+        tvStatus.setText("⚡ Connecting to " + ip + "...");
         engine.sendFiles(this, ip, AppSession.selectedQueue, callback("Sending"));
     }
 
@@ -150,6 +183,7 @@ public class ConnectTransferActivity extends AppCompatActivity {
             @Override public void onProgress(String f, int i, int t, int p, double s) {
                 runOnUiThread(() -> {
                     bar.setProgress(p);
+                    speedGraph.setSpeed(s);
                     tvSpeed.setText(String.format(Locale.US, "⚡ %.1f Mbps", s));
                     tvStatus.setText(tag + " (" + i + "/" + t + "): " + f + " [" + p + "%]");
                 });
@@ -157,6 +191,7 @@ public class ConnectTransferActivity extends AppCompatActivity {
             @Override public void onDone(int t, long b) {
                 runOnUiThread(() -> {
                     bar.setProgress(100);
+                    speedGraph.setSpeed(0);
                     tvStatus.setText("✅ Completed: " + t + " files (" + AppSession.formatSize(b) + ")");
                 });
             }

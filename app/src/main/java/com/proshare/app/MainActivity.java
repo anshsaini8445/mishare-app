@@ -1,5 +1,6 @@
 package com.proshare.app;
 
+import android.bluetooth.BluetoothAdapter;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -18,329 +19,474 @@ import androidx.appcompat.app.AppCompatActivity;
 
 public class MainActivity extends AppCompatActivity {
 
-    private FrameLayout contentContainer;
-    private Button navHome, navHistory, navWeb;
+    private FrameLayout screenContainer;
     private MultiTransferEngine webEngine;
-    private WifiDirectEngine wifiCheck;
+    private WifiDirectEngine wifiDirect;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Zero-Lag Preload in Background immediately on launch!
+        AppSession.preloadAllMediaAsync(this);
         webEngine = new MultiTransferEngine();
-        wifiCheck = new WifiDirectEngine();
+        wifiDirect = new WifiDirectEngine();
 
-        LinearLayout master = new LinearLayout(this);
-        master.setOrientation(LinearLayout.VERTICAL);
-        master.setBackgroundColor(Color.parseColor("#070B14"));
-
-        contentContainer = new FrameLayout(this);
-        contentContainer.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-        master.addView(contentContainer);
-
-        // SLEEK BOTTOM NAVIGATION BAR
-        LinearLayout bottomNav = new LinearLayout(this);
-        bottomNav.setOrientation(LinearLayout.HORIZONTAL);
-        bottomNav.setBackground(UiHelper.bentoBox("#0F172A", "#1E293B", 0, 2));
-        bottomNav.setPadding(25, 18, 25, 18);
-
-        navHome = createNavTab("⚡ Home", true);
-        navHistory = createNavTab("📊 History", false);
-        navWeb = createNavTab("📺 TV / PC Hub", false);
-
-        navHome.setOnClickListener(v -> switchTab(0));
-        navHistory.setOnClickListener(v -> switchTab(1));
-        navWeb.setOnClickListener(v -> switchTab(2));
-
-        bottomNav.addView(navHome);
-        bottomNav.addView(navHistory);
-        bottomNav.addView(navWeb);
-        master.addView(bottomNav);
-
-        setContentView(master);
-        switchTab(0);
+        screenContainer = new FrameLayout(this);
+        screenContainer.setBackgroundColor(Color.WHITE);
+        setContentView(screenContainer);
+        showHomeScreen();
     }
 
-    private Button createNavTab(String title, boolean active) {
-        Button b = new Button(this);
-        b.setText(title);
-        b.setAllCaps(false);
-        b.setTextSize(13f);
-        b.setTypeface(null, Typeface.BOLD);
-        UiHelper.enableTvFocus(b);
-        b.setLayoutParams(new LinearLayout.LayoutParams(0, 120, 1f));
-        styleNavTab(b, active);
-        return b;
+    private void showScreen(View v) {
+        screenContainer.removeAllViews();
+        screenContainer.addView(v);
     }
 
-    private void styleNavTab(Button b, boolean active) {
-        if (active) {
-            b.setTextColor(Color.parseColor("#070B14"));
-            b.setBackground(UiHelper.box("#00F5D4", 30));
-        } else {
-            b.setTextColor(Color.parseColor("#94A3B8"));
-            b.setBackgroundColor(Color.TRANSPARENT);
-        }
-    }
-
-    private void switchTab(int index) {
-        styleNavTab(navHome, index == 0);
-        styleNavTab(navHistory, index == 1);
-        styleNavTab(navWeb, index == 2);
-
-        contentContainer.removeAllViews();
-        if (index == 0) contentContainer.addView(buildBentoHomeTab());
-        else if (index == 1) contentContainer.addView(buildBentoHistoryTab());
-        else contentContainer.addView(buildBentoWebTab());
-    }
-
-    private View buildBentoHomeTab() {
+    // 1. MAKKHAN-SMOOTH HOME SCREEN (Upgraded from Video 00:03)
+    private void showHomeScreen() {
         ScrollView scroll = new ScrollView(this);
+        scroll.setBackgroundColor(Color.WHITE);
+        scroll.setFillViewport(true);
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(35, 45, 35, 45);
+        root.setPadding(45, 45, 45, 45);
 
-        LinearLayout header = new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        TextView brand = UiHelper.makeTitle(this, "⚡ HYPERSHARE X", "#00F5D4", 24f);
-        brand.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        // Top Bar: Menu (☰) + Brand Name + Invite Pill (⊕ Invite)
+        LinearLayout topBar = new LinearLayout(this);
+        topBar.setOrientation(LinearLayout.HORIZONTAL);
+        topBar.setGravity(Gravity.CENTER_VERTICAL);
 
-        Button invitePill = new Button(this);
-        invitePill.setText("⊕ Invite");
-        invitePill.setAllCaps(false);
-        invitePill.setTextColor(Color.WHITE);
-        invitePill.setBackground(UiHelper.bentoBox("#1E293B", "#38BDF8", 30, 2));
-        UiHelper.enableTvFocus(invitePill);
-        invitePill.setOnClickListener(v -> shareAppLink());
+        TextView btnDrawer = UiHelper.makeTitle(this, "☰", "#1E293B", 26f);
+        btnDrawer.setPadding(10, 10, 35, 10);
+        UiHelper.attachSmoothBounce(btnDrawer);
+        btnDrawer.setOnClickListener(v -> showSettingsScreen());
 
-        header.addView(brand);
-        header.addView(invitePill);
-        root.addView(header);
+        TextView tvBrand = UiHelper.makeTitle(this, "HyperShare", "#0F172A", 22f);
+        tvBrand.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
-        // Dual-Band 2.4GHz + 5GHz + RAM Status Bento Card
-        int bufKb = MultiTransferEngine.getDynamicBufferSize(this) / 1024;
-        LinearLayout turboBento = new LinearLayout(this);
-        turboBento.setOrientation(LinearLayout.VERTICAL);
-        turboBento.setBackground(UiHelper.bentoBox("#11192E", "#00F5D4", 38, 2));
-        turboBento.setPadding(35, 30, 35, 30);
-        LinearLayout.LayoutParams tbLp = new LinearLayout.LayoutParams(-1, -2);
-        tbLp.topMargin = 35;
-        turboBento.setLayoutParams(tbLp);
+        Button btnInvite = new Button(this);
+        btnInvite.setText("⊕ Invite");
+        btnInvite.setAllCaps(false);
+        btnInvite.setTextColor(Color.parseColor("#1E293B"));
+        btnInvite.setBackground(UiHelper.box("#F1F5F9", 50));
+        btnInvite.setLayoutParams(new LinearLayout.LayoutParams(250, 96));
+        UiHelper.attachSmoothBounce(btnInvite);
+        btnInvite.setOnClickListener(v -> showInviteScreen());
 
-        turboBento.addView(UiHelper.makeTitle(this, "🟢 " + wifiCheck.getBandStatus(this), "#00F5D4", 14f));
-        TextView sub = new TextView(this);
-        sub.setText("Device: " + Build.MODEL + " (Android " + Build.VERSION.RELEASE + ") • Buffer: " + bufKb + " KB");
-        sub.setTextColor(Color.parseColor("#94A3B8"));
-        sub.setPadding(0, 8, 0, 0);
-        turboBento.addView(sub);
-        root.addView(turboBento);
+        topBar.addView(btnDrawer);
+        topBar.addView(tvBrand);
+        topBar.addView(btnInvite);
+        root.addView(topBar);
 
-        // SEND & RECEIVE Hero Bento Cards
+        // Big Circular SEND & RECEIVE Hero Buttons (Vector Plane & Arrow - Video 00:03)
         LinearLayout heroRow = new LinearLayout(this);
         heroRow.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams hrLp = new LinearLayout.LayoutParams(-1, -2);
-        hrLp.topMargin = 35;
-        heroRow.setLayoutParams(hrLp);
+        heroRow.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams hLp = new LinearLayout.LayoutParams(-1, -2);
+        hLp.topMargin = 110;
+        heroRow.setLayoutParams(hLp);
 
-        LinearLayout sendBento = createHeroBento("🚀\nSEND", "Phone • TV • PC", "#00F5D4", "#10B981");
-        sendBento.setOnClickListener(v -> startActivity(new Intent(this, FilePickerActivity.class)));
+        LinearLayout sendCol = createHeroButton("Send", true);
+        sendCol.setOnClickListener(v -> startActivity(new Intent(this, FilePickerActivity.class)));
 
-        View gap = new View(this);
-        gap.setLayoutParams(new LinearLayout.LayoutParams(28, 10));
+        View space = new View(this);
+        space.setLayoutParams(new LinearLayout.LayoutParams(110, 10));
 
-        LinearLayout recBento = createHeroBento("📡\nRECEIVE", "2.4G / 5G Radar", "#38BDF8", "#2563EB");
-        recBento.setOnClickListener(v -> {
+        LinearLayout recCol = createHeroButton("Receive", false);
+        recCol.setOnClickListener(v -> {
             Intent i = new Intent(this, ConnectTransferActivity.class);
             i.putExtra("MODE", "RECEIVE");
             startActivity(i);
         });
 
-        heroRow.addView(sendBento);
-        heroRow.addView(gap);
-        heroRow.addView(recBento);
+        heroRow.addView(sendCol);
+        heroRow.addView(space);
+        heroRow.addView(recCol);
         root.addView(heroRow);
 
-        TextView catHeader = UiHelper.makeTitle(this, "One-Tap Bento Categories", "#E2E8F0", 16f);
-        catHeader.setPadding(5, 40, 5, 20);
-        root.addView(catHeader);
+        // Pastel Pill Buttons: [ 🕒 History ]  [ 💻 Connect to PC ] (Video 00:04)
+        LinearLayout pillRow = new LinearLayout(this);
+        pillRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-1, -2);
+        pLp.topMargin = 95;
+        pillRow.setLayoutParams(pLp);
 
-        LinearLayout gridRow1 = new LinearLayout(this);
-        gridRow1.addView(createMiniBento("🎬 Videos", "Movies & Clips", "#A855F7", "VIDEOS"));
-        View g1 = new View(this); g1.setLayoutParams(new LinearLayout.LayoutParams(25, 10));
-        gridRow1.addView(g1);
-        gridRow1.addView(createMiniBento("🖼️ Photos", "HD Gallery", "#38BDF8", "PHOTOS"));
-        root.addView(gridRow1);
+        Button btnHistory = new Button(this);
+        btnHistory.setText("🕒  History");
+        btnHistory.setAllCaps(false);
+        btnHistory.setTextColor(Color.parseColor("#1E293B"));
+        btnHistory.setTypeface(null, Typeface.BOLD);
+        btnHistory.setBackground(UiHelper.box("#EEF2FF", 50));
+        btnHistory.setLayoutParams(new LinearLayout.LayoutParams(0, 145, 1f));
+        UiHelper.attachSmoothBounce(btnHistory);
+        btnHistory.setOnClickListener(v -> {
+            Intent i = new Intent(this, FilePickerActivity.class);
+            i.putExtra("START_TAB", "HISTORY");
+            startActivity(i);
+        });
 
-        LinearLayout gridRow2 = new LinearLayout(this);
-        LinearLayout.LayoutParams gr2Lp = new LinearLayout.LayoutParams(-1, -2);
-        gr2Lp.topMargin = 25;
-        gridRow2.setLayoutParams(gr2Lp);
-        gridRow2.addView(createMiniBento("📦 Apps (APK)", "Phone & TV Apps", "#10B981", "APPS"));
-        View g2 = new View(this); g2.setLayoutParams(new LinearLayout.LayoutParams(25, 10));
-        gridRow2.addView(g2);
-        gridRow2.addView(createMiniBento("👤 Contacts", "All VCF Cards", "#F59E0B", "CONTACTS"));
-        root.addView(gridRow2);
+        View pSpace = new View(this);
+        pSpace.setLayoutParams(new LinearLayout.LayoutParams(35, 10));
+
+        Button btnPc = new Button(this);
+        btnPc.setText("💻  Connect to PC");
+        btnPc.setAllCaps(false);
+        btnPc.setTextColor(Color.parseColor("#0F172A"));
+        btnPc.setTypeface(null, Typeface.BOLD);
+        btnPc.setBackground(UiHelper.box("#E6F9F6", 50));
+        btnPc.setLayoutParams(new LinearLayout.LayoutParams(0, 145, 1f));
+        UiHelper.attachSmoothBounce(btnPc);
+        btnPc.setOnClickListener(v -> showWebShareModeScreen());
+
+        pillRow.addView(btnHistory);
+        pillRow.addView(pSpace);
+        pillRow.addView(btnPc);
+        root.addView(pillRow);
+
+        // Connect to Jio/iOS/PC/Tablet > Link (Video 00:04)
+        TextView tvCross = new TextView(this);
+        tvCross.setText("Connect to Jio / iOS / PC / Smart TV  >");
+        tvCross.setTextColor(Color.parseColor("#334155"));
+        tvCross.setTextSize(14.5f);
+        tvCross.setGravity(Gravity.CENTER);
+        tvCross.setPadding(20, 75, 20, 30);
+        UiHelper.attachSmoothBounce(tvCross);
+        tvCross.setOnClickListener(v -> showWebShareModeScreen());
+        root.addView(tvCross);
+
+        // Turbo Hardware Status Card at Bottom
+        LinearLayout infoCard = new LinearLayout(this);
+        infoCard.setOrientation(LinearLayout.VERTICAL);
+        infoCard.setBackground(UiHelper.bentoBox("#F8FAFC", "#E2E8F0", 35, 2));
+        infoCard.setPadding(35, 30, 35, 30);
+        LinearLayout.LayoutParams icLp = new LinearLayout.LayoutParams(-1, -2);
+        icLp.topMargin = 60;
+        infoCard.setLayoutParams(icLp);
+
+        infoCard.addView(UiHelper.makeTitle(this, "⚡ Zero-Lag Turbo Engine (" + wifiDirect.getBandStatus(this) + ")", "#0F172A", 13.5f));
+        TextView st = new TextView(this);
+        st.setText(AppSession.getStorageText() + "  •  Device: " + Build.MODEL);
+        st.setTextColor(Color.parseColor("#64748B"));
+        st.setTextSize(12.5f);
+        st.setPadding(0, 8, 0, 0);
+        infoCard.addView(st);
+        root.addView(infoCard);
 
         scroll.addView(root);
-        return scroll;
+        showScreen(scroll);
     }
 
-    private View buildBentoHistoryTab() {
+    private LinearLayout createHeroButton(String label, boolean isSend) {
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(Gravity.CENTER);
+        UiHelper.attachSmoothBounce(col);
+
+        UiHelper.HeroCircleView circle = new UiHelper.HeroCircleView(this, isSend);
+        circle.setLayoutParams(new LinearLayout.LayoutParams(260, 260));
+
+        TextView tv = UiHelper.makeTitle(this, label, "#0F172A", 19f);
+        tv.setPadding(0, 22, 0, 0);
+
+        col.addView(circle);
+        col.addView(tv);
+        return col;
+    }
+
+    // 2. WEB SHARE SCREEN: HOTSPOT MODE (FASTER) & WI-FI MODE (CONVENIENT) (Video 00:14 - 00:30)
+    private void showWebShareModeScreen() {
+        webEngine.startWebServer();
+        String ip = MultiTransferEngine.getLocalIp(this);
+        String url = "http://" + ip + ":" + MultiTransferEngine.WEB_PORT;
+
         ScrollView scroll = new ScrollView(this);
+        scroll.setBackgroundColor(Color.WHITE);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(35, 45, 35, 45);
+        root.setPadding(45, 45, 45, 45);
 
-        root.addView(UiHelper.makeTitle(this, "📊 Transfer Statistics & Storage", "#00F5D4", 22f));
+        root.addView(createBackHeader("Web Share"));
 
-        LinearLayout statGrid = new LinearLayout(this);
-        LinearLayout.LayoutParams sgLp = new LinearLayout.LayoutParams(-1, -2);
-        sgLp.topMargin = 35;
-        statGrid.setLayoutParams(sgLp);
+        TextView sub = new TextView(this);
+        sub.setText("Select a transmission mode");
+        sub.setTextColor(Color.parseColor("#64748B"));
+        sub.setPadding(5, 25, 5, 35);
+        root.addView(sub);
 
-        statGrid.addView(createStatBento("🚀 SENT", AppSession.getSentText(this), "#00F5D4"));
-        View sGap = new View(this); sGap.setLayoutParams(new LinearLayout.LayoutParams(25, 10));
-        statGrid.addView(sGap);
-        statGrid.addView(createStatBento("📥 RECEIVED", AppSession.getRecText(this), "#38BDF8"));
-        root.addView(statGrid);
+        // Mode 1: Hotspot Mode (Faster) - Video 00:15
+        LinearLayout hotspotCard = new LinearLayout(this);
+        hotspotCard.setOrientation(LinearLayout.VERTICAL);
+        hotspotCard.setGravity(Gravity.CENTER);
+        hotspotCard.setBackground(UiHelper.bentoBox("#F8FAFC", "#E2E8F0", 40, 2));
+        hotspotCard.setPadding(40, 50, 40, 50);
+        UiHelper.attachSmoothBounce(hotspotCard);
 
-        LinearLayout filesCard = new LinearLayout(this);
-        filesCard.setOrientation(LinearLayout.VERTICAL);
-        filesCard.setBackground(UiHelper.bentoBox("#11192E", "#263554", 35, 2));
-        filesCard.setPadding(35, 35, 35, 35);
-        LinearLayout.LayoutParams fcLp = new LinearLayout.LayoutParams(-1, -2);
-        fcLp.topMargin = 25;
-        filesCard.setLayoutParams(fcLp);
+        TextView badgeFast = new TextView(this);
+        badgeFast.setText("  Faster  ");
+        badgeFast.setTextColor(Color.parseColor("#B45309"));
+        badgeFast.setBackground(UiHelper.box("#FEF3C7", 20));
+        hotspotCard.addView(badgeFast);
 
-        filesCard.addView(UiHelper.makeTitle(this, "📦 Total Files Transferred: " + AppSession.getFilesCount(this), "#FACC15", 18f));
-        TextView st = new TextView(this);
-        st.setText(AppSession.getStorageText() + "\nSave Path: /Download/HyperShare");
-        st.setTextColor(Color.parseColor("#CBD5E1"));
-        st.setPadding(0, 15, 0, 0);
-        filesCard.addView(st);
-        root.addView(filesCard);
+        TextView iconHot = UiHelper.makeTitle(this, "((📡))", "#FFFFFF", 26f);
+        iconHot.setGravity(Gravity.CENTER);
+        iconHot.setBackground(UiHelper.circleGradient("#16CC3E", "#10B981"));
+        LinearLayout.LayoutParams ihLp = new LinearLayout.LayoutParams(190, 190);
+        ihLp.topMargin = 15;
+        iconHot.setLayoutParams(ihLp);
+        hotspotCard.addView(iconHot);
 
-        Button batteryShield = UiHelper.makeBtn(this, "🛡️ Enable Zero-Drop Battery Shield", "#151E32", "#00F5D4");
-        batteryShield.setOnClickListener(v -> {
+        TextView titleHot = UiHelper.makeTitle(this, "Hotspot Mode", "#0F172A", 18f);
+        titleHot.setPadding(0, 20, 0, 8);
+        hotspotCard.addView(titleHot);
+
+        TextView descHot = new TextView(this);
+        descHot.setText("The other device connects to the phone's hotspot. No internet data usage.");
+        descHot.setTextColor(Color.parseColor("#64748B"));
+        descHot.setGravity(Gravity.CENTER);
+        hotspotCard.addView(descHot);
+
+        hotspotCard.setOnClickListener(v -> showWebShareStepDetail("Hotspot Mode", "AndroidShare_5G", "hyper1234", url));
+        root.addView(hotspotCard);
+
+        // Mode 2: Wi-Fi Mode (Convenient) - Video 00:25
+        LinearLayout wifiCard = new LinearLayout(this);
+        wifiCard.setOrientation(LinearLayout.VERTICAL);
+        wifiCard.setGravity(Gravity.CENTER);
+        wifiCard.setBackground(UiHelper.bentoBox("#F8FAFC", "#E2E8F0", 40, 2));
+        wifiCard.setPadding(40, 50, 40, 50);
+        LinearLayout.LayoutParams wcLp = new LinearLayout.LayoutParams(-1, -2);
+        wcLp.topMargin = 35;
+        wifiCard.setLayoutParams(wcLp);
+        UiHelper.attachSmoothBounce(wifiCard);
+
+        TextView badgeConv = new TextView(this);
+        badgeConv.setText("  Convenient  ");
+        badgeConv.setTextColor(Color.parseColor("#B45309"));
+        badgeConv.setBackground(UiHelper.box("#FEF3C7", 20));
+        wifiCard.addView(badgeConv);
+
+        TextView iconWifi = UiHelper.makeTitle(this, "📶", "#FFFFFF", 26f);
+        iconWifi.setGravity(Gravity.CENTER);
+        iconWifi.setBackground(UiHelper.circleGradient("#1890FF", "#2563EB"));
+        iconWifi.setLayoutParams(ihLp);
+        wifiCard.addView(iconWifi);
+
+        TextView titleWifi = UiHelper.makeTitle(this, "Wi-Fi Mode", "#0F172A", 18f);
+        titleWifi.setPadding(0, 20, 0, 8);
+        wifiCard.addView(titleWifi);
+
+        TextView descWifi = new TextView(this);
+        descWifi.setText("Phone and the other device (PC / LED TV / Laptop) connect to the same Wi-Fi.");
+        descWifi.setTextColor(Color.parseColor("#64748B"));
+        descWifi.setGravity(Gravity.CENTER);
+        wifiCard.addView(descWifi);
+
+        wifiCard.setOnClickListener(v -> showWebShareStepDetail("Wi-Fi Mode", "Same Wi-Fi Network", "Connected", url));
+        root.addView(wifiCard);
+
+        scroll.addView(root);
+        showScreen(scroll);
+    }
+
+    // WEB SHARE STEP 1 & STEP 2 (Instant Zero-Lag - Video 00:22)
+    private void showWebShareStepDetail(String modeTitle, String netName, String pass, String url) {
+        ScrollView scroll = new ScrollView(this);
+        scroll.setBackgroundColor(Color.WHITE);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        root.setPadding(45, 45, 45, 45);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+        TextView back = UiHelper.makeTitle(this, "←  " + modeTitle, "#0F172A", 20f);
+        UiHelper.attachSmoothBounce(back);
+        back.setOnClickListener(v -> showWebShareModeScreen());
+        header.addView(back);
+        root.addView(header);
+
+        TextView step1 = UiHelper.makeTitle(this, "Step 1", "#0F172A", 18f);
+        step1.setPadding(0, 35, 0, 10);
+        root.addView(step1);
+
+        LinearLayout box1 = new LinearLayout(this);
+        box1.setOrientation(LinearLayout.VERTICAL);
+        box1.setBackground(UiHelper.box("#F1F5F9", 25));
+        box1.setPadding(35, 30, 35, 30);
+        box1.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+        TextView tvNet = UiHelper.makeTitle(this, "Network: " + netName + "\nStatus/Pass: " + pass, "#1890FF", 15f);
+        box1.addView(tvNet);
+        root.addView(box1);
+
+        TextView step2 = UiHelper.makeTitle(this, "Step 2", "#0F172A", 18f);
+        step2.setPadding(0, 40, 0, 10);
+        root.addView(step2);
+
+        TextView askUrl = new TextView(this);
+        askUrl.setText("Enter the following URL into the browser (PC / TV / Phone):");
+        askUrl.setTextColor(Color.parseColor("#64748B"));
+        root.addView(askUrl);
+
+        TextView urlBox = UiHelper.makeTitle(this, url, "#1890FF", 21f);
+        urlBox.setGravity(Gravity.CENTER);
+        urlBox.setBackground(UiHelper.bentoBox("#F0F9FF", "#BAE6FD", 25, 2));
+        urlBox.setPadding(30, 30, 30, 30);
+        LinearLayout.LayoutParams uLp = new LinearLayout.LayoutParams(-1, -2);
+        uLp.topMargin = 20;
+        urlBox.setLayoutParams(uLp);
+        root.addView(urlBox);
+
+        ImageView qr = new ImageView(this);
+        qr.setImageBitmap(QrGenerator.createAutoQr(url));
+        LinearLayout.LayoutParams qLp = new LinearLayout.LayoutParams(420, 420);
+        qLp.topMargin = 35;
+        qr.setLayoutParams(qLp);
+        root.addView(qr);
+
+        scroll.addView(root);
+        showScreen(scroll);
+    }
+
+    // 3. INVITE TO INSTALL SCREEN (Video 00:54)
+    private void showInviteScreen() {
+        ScrollView scroll = new ScrollView(this);
+        scroll.setBackgroundColor(Color.WHITE);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(45, 45, 45, 45);
+
+        root.addView(createBackHeader("Invite to install HyperShare"));
+
+        TextView t1 = UiHelper.makeTitle(this, "No internet needed", "#0F172A", 17f);
+        t1.setPadding(0, 40, 0, 6);
+        root.addView(t1);
+
+        TextView s1 = new TextView(this);
+        s1.setText("Share with friends nearby");
+        s1.setTextColor(Color.parseColor("#64748B"));
+        root.addView(s1);
+
+        Button btnBt = UiHelper.makeBtn(this, "🦷  Bluetooth", "#1890FF", "#FFFFFF");
+        btnBt.setOnClickListener(v -> startActivity(new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)));
+        root.addView(btnBt);
+
+        Button btnHot = UiHelper.makeBtn(this, "((📡))  Hotspot", "#16CC3E", "#FFFFFF");
+        btnHot.setOnClickListener(v -> showWebShareModeScreen());
+        root.addView(btnHot);
+
+        TextView t2 = UiHelper.makeTitle(this, "Internet required", "#0F172A", 17f);
+        t2.setPadding(0, 55, 0, 6);
+        root.addView(t2);
+
+        Button btnLink = UiHelper.makeBtn(this, "🔗  Share Link", "#F1F5F9", "#1890FF");
+        btnLink.setOnClickListener(v -> shareLinkIntent());
+        root.addView(btnLink);
+
+        Button btnWa = UiHelper.makeBtn(this, "💬  WhatsApp", "#16CC3E", "#FFFFFF");
+        btnWa.setOnClickListener(v -> shareLinkIntent());
+        root.addView(btnWa);
+
+        scroll.addView(root);
+        showScreen(scroll);
+    }
+
+    // 4. SETTINGS & STATS SCREEN (Video 01:12)
+    private void showSettingsScreen() {
+        ScrollView scroll = new ScrollView(this);
+        scroll.setBackgroundColor(Color.WHITE);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(45, 45, 45, 45);
+
+        root.addView(createBackHeader("Settings"));
+
+        TextView dev = UiHelper.makeTitle(this, "👤  " + Build.MODEL, "#0F172A", 20f);
+        dev.setGravity(Gravity.CENTER);
+        dev.setPadding(0, 40, 0, 35);
+        root.addView(dev);
+
+        // Sent | Received | Files Row (Video 01:12)
+        LinearLayout statRow = new LinearLayout(this);
+        statRow.setOrientation(LinearLayout.HORIZONTAL);
+        statRow.setBackground(UiHelper.bentoBox("#F8FAFC", "#E2E8F0", 35, 2));
+        statRow.setPadding(25, 35, 25, 35);
+
+        statRow.addView(makeStatCol(AppSession.getSentText(this), "Sent"));
+        statRow.addView(makeStatCol(AppSession.getRecText(this), "Received"));
+        statRow.addView(makeStatCol(String.valueOf(AppSession.getFilesCount(this)), "Files"));
+        root.addView(statRow);
+
+        TextView gen = UiHelper.makeTitle(this, "GENERAL SETTINGS", "#10B981", 13f);
+        gen.setPadding(0, 45, 0, 15);
+        root.addView(gen);
+
+        TextView loc = UiHelper.makeTitle(this, "Save Location\n/storage/emulated/0/Download/HyperShare", "#334155", 14.5f);
+        loc.setPadding(0, 15, 0, 25);
+        root.addView(loc);
+
+        // Avoid Abnormal Stop + SET Button (Video 01:13)
+        LinearLayout stopRow = new LinearLayout(this);
+        stopRow.setGravity(Gravity.CENTER_VERTICAL);
+        stopRow.setPadding(0, 15, 0, 25);
+
+        TextView tvStop = new TextView(this);
+        tvStop.setText("Avoid Abnormal Stop\nTurn off system battery optimization to strengthen stability.");
+        tvStop.setTextColor(Color.parseColor("#334155"));
+        tvStop.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+
+        Button btnSet = new Button(this);
+        btnSet.setText("SET");
+        btnSet.setTextColor(Color.WHITE);
+        btnSet.setBackground(UiHelper.box("#16CC3E", 25));
+        UiHelper.attachSmoothBounce(btnSet);
+        btnSet.setOnClickListener(v -> {
             try {
                 startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
             } catch (Exception ignored) {}
         });
-        root.addView(batteryShield);
+
+        stopRow.addView(tvStop);
+        stopRow.addView(btnSet);
+        root.addView(stopRow);
 
         scroll.addView(root);
-        return scroll;
+        showScreen(scroll);
     }
 
-    private View buildBentoWebTab() {
-        webEngine.startWebServer();
-        String url = "http://" + MultiTransferEngine.getLocalIp(this) + ":" + MultiTransferEngine.WEB_PORT;
-
-        ScrollView scroll = new ScrollView(this);
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.setPadding(35, 45, 35, 45);
-
-        root.addView(UiHelper.makeTitle(this, "📺 Smart LED TV / PC / Laptop Hub", "#38BDF8", 21f));
-
-        LinearLayout qrBento = new LinearLayout(this);
-        qrBento.setOrientation(LinearLayout.VERTICAL);
-        qrBento.setGravity(Gravity.CENTER);
-        qrBento.setBackground(UiHelper.bentoBox("#FFFFFF", "#38BDF8", 40, 6));
-        qrBento.setPadding(30, 30, 30, 30);
-        LinearLayout.LayoutParams qLp = new LinearLayout.LayoutParams(-2, -2);
-        qLp.topMargin = 30;
-        qrBento.setLayoutParams(qLp);
-
-        ImageView qr = new ImageView(this);
-        qr.setImageBitmap(QrGenerator.createAutoQr(url));
-        qrBento.addView(qr);
-        root.addView(qrBento);
-
-        LinearLayout urlCard = new LinearLayout(this);
-        urlCard.setOrientation(LinearLayout.VERTICAL);
-        urlCard.setBackground(UiHelper.bentoBox("#11192E", "#00F5D4", 35, 2));
-        urlCard.setPadding(35, 30, 35, 30);
-        LinearLayout.LayoutParams uLp = new LinearLayout.LayoutParams(-1, -2);
-        uLp.topMargin = 30;
-        urlCard.setLayoutParams(uLp);
-
-        urlCard.addView(UiHelper.makeTitle(this, "🌐 Open Browser on LED TV, PC or Laptop:", "#94A3B8", 14f));
-        urlCard.addView(UiHelper.makeTitle(this, url, "#00F5D4", 20f));
-        TextView hint = new TextView(this);
-        hint.setText("All selected Videos, Photos, Songs & APKs can be downloaded directly with 1-Click!");
-        hint.setTextColor(Color.WHITE);
-        hint.setPadding(0, 10, 0, 0);
-        urlCard.addView(hint);
-        root.addView(urlCard);
-
-        scroll.addView(root);
-        return scroll;
+    private LinearLayout makeStatCol(String val, String label) {
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.setGravity(Gravity.CENTER);
+        col.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        col.addView(UiHelper.makeTitle(this, val, "#0F172A", 20f));
+        TextView sub = new TextView(this);
+        sub.setText(label);
+        sub.setTextColor(Color.parseColor("#64748B"));
+        col.addView(sub);
+        return col;
     }
 
-    private LinearLayout createHeroBento(String title, String sub, String c1, String c2) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setGravity(Gravity.CENTER);
-        card.setBackground(UiHelper.gradientBento(c1, c2, 42));
-        card.setPadding(30, 65, 30, 65);
-        UiHelper.enableTvFocus(card);
-        card.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-        TextView t1 = UiHelper.makeTitle(this, title, "#070B14", 22f);
-        t1.setGravity(Gravity.CENTER);
-        TextView t2 = new TextView(this);
-        t2.setText(sub);
-        t2.setTextColor(Color.parseColor("#0F172A"));
-        t2.setTypeface(null, Typeface.BOLD);
-        t2.setGravity(Gravity.CENTER);
-        t2.setPadding(0, 10, 0, 0);
-
-        card.addView(t1);
-        card.addView(t2);
-        return card;
+    private LinearLayout createBackHeader(String title) {
+        LinearLayout bar = new LinearLayout(this);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        TextView tv = UiHelper.makeTitle(this, "←   " + title, "#0F172A", 20f);
+        UiHelper.attachSmoothBounce(tv);
+        tv.setOnClickListener(v -> showHomeScreen());
+        bar.addView(tv);
+        return bar;
     }
 
-    private LinearLayout createMiniBento(String title, String sub, String accentHex, String tabName) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(UiHelper.bentoBox("#11192E", accentHex, 34, 2));
-        card.setPadding(30, 35, 30, 35);
-        UiHelper.enableTvFocus(card);
-        card.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-        card.addView(UiHelper.makeTitle(this, title, accentHex, 17f));
-        TextView tvSub = new TextView(this);
-        tvSub.setText(sub);
-        tvSub.setTextColor(Color.parseColor("#94A3B8"));
-        tvSub.setTextSize(12f);
-        tvSub.setPadding(0, 8, 0, 0);
-        card.addView(tvSub);
-
-        card.setOnClickListener(v -> {
-            Intent i = new Intent(this, FilePickerActivity.class);
-            i.putExtra("START_TAB", tabName);
-            startActivity(i);
-        });
-        return card;
-    }
-
-    private LinearLayout createStatBento(String label, String val, String colorHex) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(UiHelper.bentoBox("#11192E", colorHex, 34, 2));
-        card.setPadding(30, 35, 30, 35);
-        card.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
-
-        card.addView(UiHelper.makeTitle(this, label, "#94A3B8", 13f));
-        card.addView(UiHelper.makeTitle(this, val, colorHex, 22f));
-        return card;
-    }
-
-    private void shareAppLink() {
+    private void shareLinkIntent() {
         Intent s = new Intent(Intent.ACTION_SEND);
         s.setType("text/plain");
-        s.putExtra(Intent.EXTRA_TEXT, "Download HyperShare X - Works on Android 5 to 16, Smart LED TV, PC & Phones!");
-        startActivity(Intent.createChooser(s, "Invite via"));
+        s.putExtra(Intent.EXTRA_TEXT, "Download HyperShare - Instant Zero-Lag File & Video Transfer App!");
+        startActivity(Intent.createChooser(s, "Share via"));
+    }
+
+    @Override
+    public void onBackPressed() {
+        showHomeScreen();
     }
 }

@@ -10,11 +10,11 @@ import android.os.Environment;
 import android.os.StatFs;
 import android.provider.MediaStore;
 import java.io.File;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.Executors;
 
 public class AppSession {
@@ -24,81 +24,78 @@ public class AppSession {
         public String path;
         public long size;
         public String category;
-        public String dateStr;
 
         public ShareItem(String name, String path, long size, String category) {
             this.name = name;
             this.path = path;
             this.size = size;
             this.category = category;
-            this.dateStr = new SimpleDateFormat("dd-MMM-yyyy", Locale.US).format(new Date());
         }
     }
 
     public static final List<ShareItem> selectedQueue = new ArrayList<>();
-    public static final List<ShareItem> cachedApps = new ArrayList<>();
-    public static final List<ShareItem> cachedVideos = new ArrayList<>();
-    public static final List<ShareItem> cachedPhotos = new ArrayList<>();
-    public static final List<ShareItem> cachedSongs = new ArrayList<>();
-    public static final List<ShareItem> cachedFiles = new ArrayList<>();
-    public static final List<ShareItem> historyList = new ArrayList<>();
-
-    private static volatile boolean isPreloaded = false;
+    public static final Map<String, List<ShareItem>> ramCache = new HashMap<>();
+    private static boolean preloading = false;
     private static final String PREF = "HyperSharePrefs";
 
-    // Zero-Lag Background Pre-Loader so Send Screen opens in 0ms without spinning
+    // Pre-loads all tabs in background so Send screen opens with ZERO lag
     public static void preloadAllMediaAsync(Context ctx) {
-        if (isPreloaded) return;
+        if (preloading) return;
+        preloading = true;
         final Context appCtx = ctx.getApplicationContext();
         Executors.newSingleThreadExecutor().execute(() -> {
-            try {
-                loadApps(appCtx);
-                loadMedia(appCtx, MediaStore.Video.Media.EXTERNAL_CONTENT_URI, "VIDEOS", cachedVideos);
-                loadMedia(appCtx, MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "PHOTOS", cachedPhotos);
-                loadMedia(appCtx, MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, "SONGS", cachedSongs);
-                loadMedia(appCtx, MediaStore.Files.getContentUri("external"), "FILES", cachedFiles);
-                isPreloaded = true;
-            } catch (Exception ignored) {}
+            getCategoryItems(appCtx, "APPS");
+            getCategoryItems(appCtx, "VIDEOS");
+            getCategoryItems(appCtx, "FILES");
+            getCategoryItems(appCtx, "PHOTOS");
+            getCategoryItems(appCtx, "SONGS");
+            preloading = false;
         });
     }
 
-    public static void forceRefresh(Context ctx) {
-        isPreloaded = false;
-        preloadAllMediaAsync(ctx);
-    }
+    public static List<ShareItem> getCategoryItems(Context ctx, String tab) {
+        if (ramCache.containsKey(tab) && !ramCache.get(tab).isEmpty()) {
+            return new ArrayList<>(ramCache.get(tab));
+        }
 
-    private static void loadApps(Context ctx) {
-        cachedApps.clear();
+        List<ShareItem> list = new ArrayList<>();
         try {
-            PackageManager pm = ctx.getPackageManager();
-            for (ApplicationInfo app : pm.getInstalledApplications(0)) {
-                if ((app.flags & ApplicationInfo.FLAG_SYSTEM) == 0 && app.sourceDir != null) {
-                    File f = new File(app.sourceDir);
-                    cachedApps.add(new ShareItem(pm.getApplicationLabel(app).toString() + ".apk", f.getAbsolutePath(), f.length(), "APPS"));
+            if ("APPS".equals(tab)) {
+                PackageManager pm = ctx.getPackageManager();
+                for (ApplicationInfo app : pm.getInstalledApplications(0)) {
+                    if ((app.flags & ApplicationInfo.FLAG_SYSTEM) == 0 && app.sourceDir != null) {
+                        File f = new File(app.sourceDir);
+                        list.add(new ShareItem(pm.getApplicationLabel(app).toString() + ".apk", f.getAbsolutePath(), f.length(), "APPS"));
+                    }
                 }
-            }
-        } catch (Exception ignored) {}
-    }
+            } else {
+                Uri uri = MediaStore.Files.getContentUri("external");
+                if ("VIDEOS".equals(tab)) uri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI;
+                else if ("PHOTOS".equals(tab)) uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
+                else if ("SONGS".equals(tab)) uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
 
-    public static void loadMedia(Context ctx, Uri uri, String cat, List<ShareItem> target) {
-        target.clear();
-        String[] proj = {MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.SIZE};
-        try (Cursor c = ctx.getContentResolver().query(uri, proj, null, null, MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
-            if (c != null) {
-                int count = 0;
-                while (c.moveToNext() && count < 80) {
-                    String name = c.getString(0);
-                    String path = c.getString(1);
-                    long size = c.getLong(2);
-                    if (path != null && new File(path).exists() && size > 0) {
-                        ShareItem item = new ShareItem(name != null ? name : "File_" + count, path, size, cat);
-                        target.add(item);
-                        if (historyList.size() < 15) historyList.add(item);
-                        count++;
+                String[] proj = {MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.SIZE};
+                try (Cursor c = ctx.getContentResolver().query(uri, proj, null, null, MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
+                    if (c != null) {
+                        int count = 0;
+                        while (c.moveToNext() && count < 80) {
+                            String name = c.getString(0);
+                            String path = c.getString(1);
+                            long size = c.getLong(2);
+                            if (path != null && new File(path).exists() && size > 0) {
+                                list.add(new ShareItem(name != null ? name : "File_" + count, path, size, tab));
+                                count++;
+                            }
+                        }
                     }
                 }
             }
         } catch (Exception ignored) {}
+
+        if (!list.isEmpty()) {
+            ramCache.put(tab, list);
+        }
+        return list;
     }
 
     public static void addStats(Context ctx, long sentBytes, long recBytes, int files) {

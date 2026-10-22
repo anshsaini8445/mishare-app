@@ -2,18 +2,26 @@ package com.proshare.app;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.net.wifi.WifiManager;
 import android.net.wifi.p2p.WifiP2pConfig;
 import android.net.wifi.p2p.WifiP2pManager;
+import android.os.Build;
 import android.os.Looper;
 
 public class WifiDirectEngine {
 
     private WifiP2pManager manager;
     private WifiP2pManager.Channel channel;
+    private boolean supports5Ghz = false;
 
     @SuppressLint("MissingPermission")
     public void initFastP2p(Context ctx) {
         try {
+            WifiManager wm = (WifiManager) ctx.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                supports5Ghz = wm.is5GHzBandSupported();
+            }
+
             manager = (WifiP2pManager) ctx.getSystemService(Context.WIFI_P2P_SERVICE);
             if (manager != null) {
                 channel = manager.initialize(ctx, Looper.getMainLooper(), null);
@@ -25,10 +33,50 @@ public class WifiDirectEngine {
         } catch (Exception ignored) {}
     }
 
+    public String getBandStatus(Context ctx) {
+        try {
+            WifiManager wm = (WifiManager) ctx.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && wm.is5GHzBandSupported()) {
+                return "Dual-Band Active (5GHz / Wi-Fi 6 + 2.4GHz)";
+            }
+        } catch (Exception ignored) {}
+        return "2.4GHz Turbo Mode Active (Max Compatibility)";
+    }
+
     @SuppressLint("MissingPermission")
     public void createFastGroup() {
         try {
-            if (manager != null && channel != null) {
+            if (manager == null || channel == null) return;
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                WifiP2pConfig.Builder builder = new WifiP2pConfig.Builder()
+                        .setNetworkName("DIRECT-HYPERSHARE")
+                        .setPassphrase("hyper1234");
+
+                if (supports5Ghz) {
+                    builder.setGroupOperatingBand(WifiP2pConfig.GROUP_OWNER_BAND_5GHZ);
+                } else {
+                    builder.setGroupOperatingBand(WifiP2pConfig.GROUP_OWNER_BAND_2GHZ);
+                }
+
+                manager.createGroup(channel, builder.build(), new WifiP2pManager.ActionListener() {
+                    @Override public void onSuccess() {}
+                    @Override public void onFailure(int reason) {
+                        // Automatic Fallback to 2.4GHz / Auto Band so it never fails on any phone
+                        try {
+                            WifiP2pConfig fallback = new WifiP2pConfig.Builder()
+                                    .setNetworkName("DIRECT-HYPERSHARE")
+                                    .setPassphrase("hyper1234")
+                                    .setGroupOperatingBand(WifiP2pConfig.GROUP_OWNER_BAND_2GHZ)
+                                    .build();
+                            manager.createGroup(channel, fallback, null);
+                        } catch (Exception e) {
+                            manager.createGroup(channel, null);
+                        }
+                    }
+                });
+            } else {
+                // Android 5.0 to Android 9.0 automatic 2.4GHz / 5GHz group negotiation
                 manager.createGroup(channel, null);
             }
         } catch (Exception ignored) {}

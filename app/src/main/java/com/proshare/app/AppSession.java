@@ -10,7 +10,9 @@ import android.os.Environment;
 import android.os.StatFs;
 import android.provider.MediaStore;
 import java.io.File;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -24,12 +26,14 @@ public class AppSession {
         public String path;
         public long size;
         public String category;
+        public String dateStr;
 
         public ShareItem(String name, String path, long size, String category) {
             this.name = name;
             this.path = path;
             this.size = size;
             this.category = category;
+            this.dateStr = new SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.US).format(new Date());
         }
     }
 
@@ -38,7 +42,11 @@ public class AppSession {
     private static boolean preloading = false;
     private static final String PREF = "HyperSharePrefs";
 
-    // Pre-loads all tabs in background so Send screen opens with ZERO lag
+    // Advanced Feature Flags
+    public static boolean autoZipEnabled = false;
+    public static boolean smartCompressEnabled = false;
+    public static String safeTransferPin = ""; // Empty means unlocked, 4-digit means PIN locked
+
     public static void preloadAllMediaAsync(Context ctx) {
         if (preloading) return;
         preloading = true;
@@ -54,6 +62,9 @@ public class AppSession {
     }
 
     public static List<ShareItem> getCategoryItems(Context ctx, String tab) {
+        if ("HISTORY".equals(tab)) {
+            return getHistoryVault(ctx);
+        }
         if (ramCache.containsKey(tab) && !ramCache.get(tab).isEmpty()) {
             return new ArrayList<>(ramCache.get(tab));
         }
@@ -78,7 +89,7 @@ public class AppSession {
                 try (Cursor c = ctx.getContentResolver().query(uri, proj, null, null, MediaStore.MediaColumns.DATE_ADDED + " DESC")) {
                     if (c != null) {
                         int count = 0;
-                        while (c.moveToNext() && count < 80) {
+                        while (c.moveToNext() && count < 120) {
                             String name = c.getString(0);
                             String path = c.getString(1);
                             long size = c.getLong(2);
@@ -96,6 +107,54 @@ public class AppSession {
             ramCache.put(tab, list);
         }
         return list;
+    }
+
+    // 60-DAY HISTORY VAULT FOR DIRECT RESEND & IN-APP PLAY
+    public static void recordHistoryItem(Context ctx, String name, String path, long size, String tag) {
+        SharedPreferences sp = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE);
+        String old = sp.getString("history_vault", "");
+        String entry = name.replace("|", "_") + "|" + path + "|" + size + "|" + tag + "\n";
+        String updated = entry + old;
+        String[] lines = updated.split("\n");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < Math.min(lines.length, 60); i++) {
+            if (!lines[i].trim().isEmpty()) sb.append(lines[i]).append("\n");
+        }
+        sp.edit().putString("history_vault", sb.toString()).apply();
+    }
+
+    public static List<ShareItem> getHistoryVault(Context ctx) {
+        List<ShareItem> list = new ArrayList<>();
+        String raw = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString("history_vault", "");
+        for (String line : raw.split("\n")) {
+            String[] p = line.split("\\|");
+            if (p.length >= 4) {
+                try {
+                    list.add(new ShareItem(p[0], p[1], Long.parseLong(p[2]), p[3]));
+                } catch (Exception ignored) {}
+            }
+        }
+        return list;
+    }
+
+    // SMART STORAGE WARNING CHECKER
+    public static boolean hasEnoughFreeSpace(long incomingBytes) {
+        try {
+            StatFs s = new StatFs(Environment.getDataDirectory().getPath());
+            long freeBytes = s.getAvailableBlocksLong() * s.getBlockSizeLong();
+            return freeBytes > (incomingBytes + 52428800L); // Keep 50MB safety margin
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    public static long getFreeSpaceBytes() {
+        try {
+            StatFs s = new StatFs(Environment.getDataDirectory().getPath());
+            return s.getAvailableBlocksLong() * s.getBlockSizeLong();
+        } catch (Exception e) {
+            return 1073741824L;
+        }
     }
 
     public static void addStats(Context ctx, long sentBytes, long recBytes, int files) {

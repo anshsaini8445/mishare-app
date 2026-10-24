@@ -33,19 +33,21 @@ public class AppSession {
             this.path = path;
             this.size = size;
             this.category = category;
-            this.dateStr = new SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.US).format(new Date());
+            this.dateStr = new SimpleDateFormat("dd-MMM-yyyy HH:mm", Locale.US).format(new Date());
         }
     }
 
     public static final List<ShareItem> selectedQueue = new ArrayList<>();
+    public static final List<ShareItem> historyVault = new ArrayList<>();
     public static final Map<String, List<ShareItem>> ramCache = new HashMap<>();
+
+    // Next-Level Toggles
+    public static boolean smartCompressEnabled = false;
+    public static boolean autoZipEnabled = true;
+    public static String safeTransferPin = ""; // Empty = Unlocked, 4-digit = PIN Locked
+
     private static boolean preloading = false;
     private static final String PREF = "HyperSharePrefs";
-
-    // Advanced Feature Flags
-    public static boolean autoZipEnabled = false;
-    public static boolean smartCompressEnabled = false;
-    public static String safeTransferPin = ""; // Empty means unlocked, 4-digit means PIN locked
 
     public static void preloadAllMediaAsync(Context ctx) {
         if (preloading) return;
@@ -61,9 +63,56 @@ public class AppSession {
         });
     }
 
+    // 1-Click Phone Clone / Phone Switch: Queues Apps, Photos, Videos & Songs
+    public static int preparePhoneCloneBatch(Context ctx) {
+        selectedQueue.clear();
+        selectedQueue.addAll(getCategoryItems(ctx, "APPS"));
+        selectedQueue.addAll(getCategoryItems(ctx, "PHOTOS"));
+        selectedQueue.addAll(getCategoryItems(ctx, "VIDEOS"));
+        selectedQueue.addAll(getCategoryItems(ctx, "SONGS"));
+        return selectedQueue.size();
+    }
+
+    // Smart Storage Warning Checker
+    public static boolean hasEnoughFreeStorage(long neededBytes) {
+        try {
+            StatFs s = new StatFs(Environment.getDataDirectory().getPath());
+            long free = s.getAvailableBlocksLong() * s.getBlockSizeLong();
+            return free > (neededBytes + 52428800L); // +50MB safety margin
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    public static long getSelectedTotalBytes() {
+        long total = 0;
+        for (ShareItem item : selectedQueue) total += item.size;
+        return total;
+    }
+
+    // Smart Duplicate File Finder (Cleaner Engine)
+    public static List<ShareItem> findDuplicateFiles(Context ctx) {
+        List<ShareItem> all = new ArrayList<>();
+        all.addAll(getCategoryItems(ctx, "VIDEOS"));
+        all.addAll(getCategoryItems(ctx, "PHOTOS"));
+        all.addAll(getCategoryItems(ctx, "SONGS"));
+
+        Map<String, ShareItem> seen = new HashMap<>();
+        List<ShareItem> duplicates = new ArrayList<>();
+        for (ShareItem it : all) {
+            String key = it.name + "_" + it.size;
+            if (seen.containsKey(key)) {
+                duplicates.add(it);
+            } else {
+                seen.put(key, it);
+            }
+        }
+        return duplicates;
+    }
+
     public static List<ShareItem> getCategoryItems(Context ctx, String tab) {
-        if ("HISTORY".equals(tab)) {
-            return getHistoryVault(ctx);
+        if ("HISTORY".equals(tab) && !historyVault.isEmpty()) {
+            return new ArrayList<>(historyVault);
         }
         if (ramCache.containsKey(tab) && !ramCache.get(tab).isEmpty()) {
             return new ArrayList<>(ramCache.get(tab));
@@ -107,54 +156,6 @@ public class AppSession {
             ramCache.put(tab, list);
         }
         return list;
-    }
-
-    // 60-DAY HISTORY VAULT FOR DIRECT RESEND & IN-APP PLAY
-    public static void recordHistoryItem(Context ctx, String name, String path, long size, String tag) {
-        SharedPreferences sp = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE);
-        String old = sp.getString("history_vault", "");
-        String entry = name.replace("|", "_") + "|" + path + "|" + size + "|" + tag + "\n";
-        String updated = entry + old;
-        String[] lines = updated.split("\n");
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < Math.min(lines.length, 60); i++) {
-            if (!lines[i].trim().isEmpty()) sb.append(lines[i]).append("\n");
-        }
-        sp.edit().putString("history_vault", sb.toString()).apply();
-    }
-
-    public static List<ShareItem> getHistoryVault(Context ctx) {
-        List<ShareItem> list = new ArrayList<>();
-        String raw = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).getString("history_vault", "");
-        for (String line : raw.split("\n")) {
-            String[] p = line.split("\\|");
-            if (p.length >= 4) {
-                try {
-                    list.add(new ShareItem(p[0], p[1], Long.parseLong(p[2]), p[3]));
-                } catch (Exception ignored) {}
-            }
-        }
-        return list;
-    }
-
-    // SMART STORAGE WARNING CHECKER
-    public static boolean hasEnoughFreeSpace(long incomingBytes) {
-        try {
-            StatFs s = new StatFs(Environment.getDataDirectory().getPath());
-            long freeBytes = s.getAvailableBlocksLong() * s.getBlockSizeLong();
-            return freeBytes > (incomingBytes + 52428800L); // Keep 50MB safety margin
-        } catch (Exception e) {
-            return true;
-        }
-    }
-
-    public static long getFreeSpaceBytes() {
-        try {
-            StatFs s = new StatFs(Environment.getDataDirectory().getPath());
-            return s.getAvailableBlocksLong() * s.getBlockSizeLong();
-        } catch (Exception e) {
-            return 1073741824L;
-        }
     }
 
     public static void addStats(Context ctx, long sentBytes, long recBytes, int files) {

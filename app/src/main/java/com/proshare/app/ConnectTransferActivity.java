@@ -13,29 +13,31 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import com.journeyapps.barcodescanner.ScanContract;
 import com.journeyapps.barcodescanner.ScanOptions;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 public class ConnectTransferActivity extends AppCompatActivity {
 
     private MultiTransferEngine engine;
     private WifiDirectEngine p2pEngine;
-    private TextView tvStatus, tvSpeed, tvRadarPopup, tvHotspotInfo;
-    private Button btnModeSwitch;
+    private TextView tvStatus, tvSpeed, tvRadarPopup, tvHotspotInfo, tvChatLog;
+    private Button btnModeSwitch, btnPauseResume;
     private ImageView qrView;
-    private ProgressBar bar;
     private EditText etIp;
-    private UiHelper.LiveSpeedGraphView speedGraph;
+    private UiHelper.LiquidWaveSphereView liquidSphere;
     private String currentModeName = "Wi-Fi Direct";
+    private String connectedPeerIp = "192.168.43.1";
 
     private final ActivityResultLauncher<ScanOptions> scanner =
             registerForActivityResult(new ScanContract(), res -> {
@@ -53,6 +55,15 @@ public class ConnectTransferActivity extends AppCompatActivity {
         p2pEngine.initFastP2p(this);
         engine.startWebServer();
 
+        // Start Offline Chat Listener
+        engine.startOfflineChatServer((sender, msg) -> runOnUiThread(() -> {
+            HapticSoundEngine.popSuccess(this);
+            if (tvChatLog != null) {
+                tvChatLog.setText("💬 " + sender + ": " + msg);
+            }
+            Toast.makeText(this, "💬 " + sender + ": " + msg, Toast.LENGTH_LONG).show();
+        }));
+
         ActivityCompat.requestPermissions(this, new String[]{
                 Manifest.permission.CAMERA,
                 Manifest.permission.ACCESS_FINE_LOCATION,
@@ -60,27 +71,23 @@ public class ConnectTransferActivity extends AppCompatActivity {
         }, 1);
 
         String mode = getIntent().getStringExtra("MODE");
-        if ("RECEIVE".equals(mode)) {
-            setContentView(buildOceanBlueReceiverUi());
-        } else {
-            setContentView(buildSenderLaserRadarUi());
-        }
+        View content = "RECEIVE".equals(mode) ? buildReceiverUi() : buildSenderUi();
+        setContentView(ThemeEngine.applyOneHandWrapper(this, content));
     }
 
-    // 1. OCEAN-BLUE RECEIVER SCREEN WITH INSTANT QR & FAST MODE SWITCH (Video 00:39 - 00:52)
-    private View buildOceanBlueReceiverUi() {
+    // 1. RECEIVER UI WITH LIVE SHIMMER QR & 3D LIQUID WAVE SPHERE
+    private View buildReceiverUi() {
         p2pEngine.createFastGroup();
         final String myIp = MultiTransferEngine.getLocalIp(this);
 
         ScrollView scroll = new ScrollView(this);
-        scroll.setBackground(UiHelper.gradientBento("#0284C7", "#2563EB", 0));
+        scroll.setBackground(UiHelper.gradientBento("#0284C7", "#1E3A8A", 0));
         scroll.setFillViewport(true);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(40, 40, 40, 40);
 
-        // Top Bar: ← Waiting for sender...  [ ⇄ Wi-Fi Direct ] (Video 00:39)
         LinearLayout topBar = new LinearLayout(this);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
 
@@ -99,61 +106,43 @@ public class ConnectTransferActivity extends AppCompatActivity {
         topBar.addView(btnModeSwitch);
         root.addView(topBar);
 
-        TextView stepInfo = new TextView(this);
-        stepInfo.setText("① Open HyperShare on sender device.\n② Ask the sender to tap \"Send\" and scan QR Code to connect.");
-        stepInfo.setTextColor(Color.parseColor("#E0F2FE"));
-        stepInfo.setPadding(0, 30, 0, 25);
-        root.addView(stepInfo);
-
-        // Crisp White QR Card (Instant 0ms QR - No "Creating QR Code..." Lag!)
+        // Live QR Card
         LinearLayout whiteCard = new LinearLayout(this);
         whiteCard.setOrientation(LinearLayout.VERTICAL);
         whiteCard.setGravity(Gravity.CENTER_HORIZONTAL);
-        whiteCard.setBackground(UiHelper.box("#FFFFFF", 36));
-        whiteCard.setPadding(40, 40, 40, 40);
+        whiteCard.setBackground(UiHelper.box("#FFFFFF", 38));
+        whiteCard.setPadding(35, 35, 35, 35);
+        LinearLayout.LayoutParams wcLp = new LinearLayout.LayoutParams(-1, -2);
+        wcLp.topMargin = 25;
+        whiteCard.setLayoutParams(wcLp);
 
-        whiteCard.addView(UiHelper.makeTitle(this, "👤  " + Build.MODEL, "#0F172A", 17f));
+        whiteCard.addView(UiHelper.makeTitle(this, "👤 " + Build.MODEL + " (" + myIp + ")", "#0F172A", 16.5f));
 
         qrView = new ImageView(this);
-        qrView.setImageBitmap(QrGenerator.createAutoQr(myIp));
-        LinearLayout.LayoutParams qLp = new LinearLayout.LayoutParams(450, 450);
+        LinearLayout.LayoutParams qLp = new LinearLayout.LayoutParams(420, 420);
         qLp.topMargin = 15;
         qrView.setLayoutParams(qLp);
         whiteCard.addView(qrView);
+        QrGenerator.displayLiveQr(qrView, myIp);
 
         tvHotspotInfo = new TextView(this);
-        tvHotspotInfo.setText("Hotspot: DIRECT-50-" + Build.MODEL + "\nPassword: hyper1234  •  IP: " + myIp);
+        tvHotspotInfo.setText(WifiDirectEngine.runHardwareSpeedBoosterTest(this));
         tvHotspotInfo.setTextColor(Color.parseColor("#0284C7"));
         tvHotspotInfo.setTypeface(null, Typeface.BOLD);
         tvHotspotInfo.setGravity(Gravity.CENTER);
-        tvHotspotInfo.setPadding(0, 10, 0, 20);
+        tvHotspotInfo.setPadding(10, 10, 10, 15);
         whiteCard.addView(tvHotspotInfo);
 
-        // ⚡ Fast Mode Switch Inside Grey Pill (Video 00:39)
         Switch fastSwitch = new Switch(this);
-        fastSwitch.setText("⚡ Fast mode (5GHz / 2.4GHz Auto Boost)    ");
+        fastSwitch.setText("⚡ 5GHz / 2.4GHz Auto-Fallback Boost   ");
         fastSwitch.setChecked(true);
         fastSwitch.setTextColor(Color.parseColor("#0F172A"));
         fastSwitch.setTypeface(null, Typeface.BOLD);
-        fastSwitch.setBackground(UiHelper.box("#F1F5F9", 35));
-        fastSwitch.setPadding(35, 25, 35, 25);
-        fastSwitch.setOnCheckedChangeListener((b, checked) -> {
-            // Instant QR update in 0ms without any lag!
-            qrView.setImageBitmap(QrGenerator.createAutoQr(myIp));
-            tvHotspotInfo.setText("Hotspot: " + (checked ? "DIRECT-5G-" : "DIRECT-24G-") + Build.MODEL + "\nPassword: hyper1234  •  IP: " + myIp);
-        });
+        fastSwitch.setOnCheckedChangeListener((b, checked) -> QrGenerator.displayLiveQr(qrView, myIp));
         whiteCard.addView(fastSwitch);
         root.addView(whiteCard);
 
-        // Live Speedometer Card
-        root.addView(buildLiveSpeedCard());
-
-        TextView storageBottom = new TextView(this);
-        storageBottom.setText(AppSession.getStorageText());
-        storageBottom.setTextColor(Color.parseColor("#BAE6FD"));
-        storageBottom.setGravity(Gravity.CENTER);
-        storageBottom.setPadding(0, 35, 0, 10);
-        root.addView(storageBottom);
+        root.addView(build3DLiquidTransferCard());
 
         engine.broadcastReceiverRadar(myIp);
         File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "HyperShare");
@@ -163,156 +152,177 @@ public class ConnectTransferActivity extends AppCompatActivity {
         return scroll;
     }
 
-    // 2. SENDER LASER FRAME & WHITE RADAR BOTTOM SHEET (Video 00:10 - 00:13)
-    private View buildSenderLaserRadarUi() {
+    // 2. SENDER UI WITH LASER SCANNER, RADAR & 3D LIQUID WAVE SPHERE
+    private View buildSenderUi() {
         String myIp = MultiTransferEngine.getLocalIp(this);
 
         ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(Color.parseColor("#0B0F19"));
+        scroll.setBackgroundColor(Color.parseColor(ThemeEngine.bg(this)));
         scroll.setFillViewport(true);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(35, 35, 35, 45);
 
-        // Dark Top Section with QR Laser Frame (Video 00:10)
-        LinearLayout topSection = new LinearLayout(this);
-        topSection.setOrientation(LinearLayout.VERTICAL);
-        topSection.setGravity(Gravity.CENTER_HORIZONTAL);
-        topSection.setPadding(40, 40, 40, 45);
-
-        LinearLayout header = new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-
-        TextView tvBack = UiHelper.makeTitle(this, "←  Connect to Receiver...", "#FFFFFF", 19f);
-        tvBack.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView tvBack = UiHelper.makeTitle(this, "←  Connect & Turbo Send", ThemeEngine.textMain(this), 20f);
         tvBack.setOnClickListener(v -> finish());
+        root.addView(tvBack);
 
-        Button btnSendPc = new Button(this);
-        btnSendPc.setText("Send to PC");
-        btnSendPc.setAllCaps(false);
-        btnSendPc.setTextColor(Color.parseColor("#0F172A"));
-        btnSendPc.setBackground(UiHelper.box("#FFFFFF", 50));
-        btnSendPc.setOnClickListener(v -> finish());
+        root.addView(PermissionBox.build(this));
 
-        header.addView(tvBack);
-        header.addView(btnSendPc);
-        topSection.addView(header);
+        // Animated Green Laser QR Frame
+        LinearLayout laserBox = new LinearLayout(this);
+        laserBox.setOrientation(LinearLayout.VERTICAL);
+        laserBox.setGravity(Gravity.CENTER);
+        laserBox.setPadding(0, 25, 0, 15);
 
-        // Animated Green Laser QR Frame (Tap to Open Camera Scanner)
         UiHelper.QrLaserFrameView laserFrame = new UiHelper.QrLaserFrameView(this);
-        LinearLayout.LayoutParams lfLp = new LinearLayout.LayoutParams(480, 480);
-        lfLp.topMargin = 55;
-        laserFrame.setLayoutParams(lfLp);
+        laserFrame.setLayoutParams(new LinearLayout.LayoutParams(380, 380));
         laserFrame.setOnClickListener(v -> scanner.launch(new ScanOptions().setOrientationLocked(true)));
-        topSection.addView(laserFrame);
+        laserBox.addView(laserFrame);
+        root.addView(laserBox);
 
-        TextView tvPlace = new TextView(this);
-        tvPlace.setText("Tap Frame to Open Camera & Scan QR Code");
-        tvPlace.setTextColor(Color.parseColor("#CBD5E1"));
-        tvPlace.setPadding(0, 25, 0, 15);
-        topSection.addView(tvPlace);
-
-        Button btnOpenCam = UiHelper.makeBtn(this, "📷  OPEN CAMERA QR SCANNER", "#16CC3E", "#FFFFFF");
+        Button btnOpenCam = UiHelper.makeBtn(this, "📷 SCAN RECEIVER QR CODE", "#16CC3E", "#FFFFFF");
         btnOpenCam.setOnClickListener(v -> scanner.launch(new ScanOptions().setOrientationLocked(true)));
-        topSection.addView(btnOpenCam);
-        root.addView(topSection);
+        root.addView(btnOpenCam);
 
-        // White Rounded Bottom Sheet: "Searching for receiver..." + Green Radar (Video 00:10)
-        LinearLayout bottomSheet = new LinearLayout(this);
-        bottomSheet.setOrientation(LinearLayout.VERTICAL);
-        bottomSheet.setGravity(Gravity.CENTER_HORIZONTAL);
-        bottomSheet.setBackground(UiHelper.box("#FFFFFF", 55));
-        bottomSheet.setPadding(45, 45, 45, 60);
-        bottomSheet.setLayoutParams(new LinearLayout.LayoutParams(-1, -1));
-
-        TextView tvSearch = UiHelper.makeTitle(this, "Searching for receiver...", "#0F172A", 19f);
-        tvSearch.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-        bottomSheet.addView(tvSearch);
-
-        UiHelper.RadarSweepView radar = new UiHelper.RadarSweepView(this);
-        LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(220, 220);
-        rLp.topMargin = 35;
-        radar.setLayoutParams(rLp);
-        bottomSheet.addView(radar);
-
-        tvRadarPopup = UiHelper.makeTitle(this, "Auto-Radar Active (2.4GHz & 5GHz)\nFor TV/PC Browser: http://" + myIp + ":8080", "#64748B", 13.5f);
+        tvRadarPopup = UiHelper.makeTitle(this, "📡 Auto-Radar Scanning...\nTV/PC Link: http://" + myIp + ":8080", ThemeEngine.accent(this), 14f);
         tvRadarPopup.setGravity(Gravity.CENTER);
-        tvRadarPopup.setPadding(15, 25, 15, 25);
-        bottomSheet.addView(tvRadarPopup);
+        tvRadarPopup.setPadding(15, 20, 15, 20);
+        root.addView(tvRadarPopup);
 
         etIp = new EditText(this);
         etIp.setHint("Or Enter Receiver IP (e.g. 192.168.43.1)");
-        etIp.setTextColor(Color.BLACK);
-        etIp.setBackground(UiHelper.box("#F1F5F9", 30));
+        etIp.setTextColor(Color.parseColor(ThemeEngine.textMain(this)));
+        etIp.setHintTextColor(Color.parseColor(ThemeEngine.textSub(this)));
+        etIp.setBackground(UiHelper.bentoBox(ThemeEngine.card(this), ThemeEngine.accent(this), 30, 2));
         etIp.setPadding(35, 25, 35, 25);
-        etIp.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
-        bottomSheet.addView(etIp);
+        root.addView(etIp);
 
-        Button manualBtn = UiHelper.makeBtn(this, "🚀  CONNECT & SEND NOW", "#1890FF", "#FFFFFF");
+        Button manualBtn = UiHelper.makeBtn(this, "🚀 START TURBO TRANSFER NOW", "#2563EB", "#FFFFFF");
         manualBtn.setOnClickListener(v -> {
             String ip = etIp.getText().toString().trim();
             if (!ip.isEmpty()) startSend(ip);
         });
-        bottomSheet.addView(manualBtn);
+        root.addView(manualBtn);
 
-        bottomSheet.addView(buildLiveSpeedCard());
-        root.addView(bottomSheet);
+        root.addView(build3DLiquidTransferCard());
 
         startRadarListen();
         scroll.addView(root);
         return scroll;
     }
 
-    // Transfer Mode Dialog: Wi-Fi Direct vs Hotspot (Video 00:48)
-    private void showTransferModeDialog(String myIp) {
-        String[] modes = {
-                "⚡ Wi-Fi Direct (No internet consumed - Recommended)",
-                "((📡)) Hotspot (Create a Hotspot to connect)"
-        };
-        new AlertDialog.Builder(this)
-                .setTitle("Transfer mode")
-                .setItems(modes, (d, which) -> {
-                    currentModeName = (which == 0) ? "Wi-Fi Direct" : "Hotspot";
-                    btnModeSwitch.setText("⇄ " + currentModeName);
-                    qrView.setImageBitmap(QrGenerator.createAutoQr(myIp));
-                })
-                .setNegativeButton("CANCEL", null)
-                .show();
-    }
-
-    private View buildLiveSpeedCard() {
+    // 3D LIQUID WAVE SPHERE + ETA TIMER + PAUSE/RESUME + OFFLINE CHAT CARD
+    private View build3DLiquidTransferCard() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(UiHelper.bentoBox("#F8FAFC", "#E2E8F0", 35, 2));
-        card.setPadding(35, 30, 35, 30);
+        card.setGravity(Gravity.CENTER_HORIZONTAL);
+        card.setBackground(UiHelper.glassCard("#00F5D4", 42));
+        card.setPadding(35, 35, 35, 35);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.topMargin = 30;
         card.setLayoutParams(lp);
 
-        tvSpeed = UiHelper.makeTitle(this, "⚡ 0.0 Mbps", "#10B981", 26f);
+        tvSpeed = UiHelper.makeTitle(this, "⚡ 0.0 Mbps", "#00F5D4", 26f);
         card.addView(tvSpeed);
 
-        speedGraph = new UiHelper.LiveSpeedGraphView(this);
-        speedGraph.setLayoutParams(new LinearLayout.LayoutParams(-1, 120));
-        card.addView(speedGraph);
+        // 3D Liquid Wave Sphere (Shows % and Remaining Minutes/Seconds ETA)
+        liquidSphere = new UiHelper.LiquidWaveSphereView(this);
+        LinearLayout.LayoutParams spLp = new LinearLayout.LayoutParams(340, 340);
+        spLp.topMargin = 20;
+        spLp.bottomMargin = 20;
+        liquidSphere.setLayoutParams(spLp);
+        card.addView(liquidSphere);
 
-        bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
-        bar.setMax(100);
-        card.addView(bar);
-
-        tvStatus = UiHelper.makeTitle(this, "Zero-Lag Turbo Socket Ready", "#334155", 13f);
-        tvStatus.setPadding(0, 10, 0, 0);
+        tvStatus = UiHelper.makeTitle(this, "2MB Smart Chunk Engine Ready", "#FFFFFF", 13.5f);
+        tvStatus.setGravity(Gravity.CENTER);
         card.addView(tvStatus);
+
+        // Pause / Resume & Offline Chat Row
+        LinearLayout ctrlRow = new LinearLayout(this);
+        ctrlRow.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams crLp = new LinearLayout.LayoutParams(-1, -2);
+        crLp.topMargin = 22;
+        ctrlRow.setLayoutParams(crLp);
+
+        btnPauseResume = new Button(this);
+        btnPauseResume.setText("⏸️ PAUSE");
+        btnPauseResume.setAllCaps(false);
+        btnPauseResume.setTextColor(Color.parseColor("#070B14"));
+        btnPauseResume.setTypeface(null, Typeface.BOLD);
+        btnPauseResume.setBackground(UiHelper.box("#FACC15", 40));
+        btnPauseResume.setLayoutParams(new LinearLayout.LayoutParams(0, 115, 1f));
+        btnPauseResume.setOnClickListener(v -> {
+            engine.togglePause();
+            btnPauseResume.setText(engine.isPaused() ? "▶️ RESUME" : "⏸️ PAUSE");
+            tvStatus.setText(engine.isPaused() ? "⏸️ Transfer Paused (Tap Resume)" : "⚡ Resuming Transfer...");
+        });
+
+        View gap = new View(this);
+        gap.setLayoutParams(new LinearLayout.LayoutParams(20, 10));
+
+        Button btnChat = new Button(this);
+        btnChat.setText("💬 Offline Chat");
+        btnChat.setAllCaps(false);
+        btnChat.setTextColor(Color.WHITE);
+        btnChat.setTypeface(null, Typeface.BOLD);
+        btnChat.setBackground(UiHelper.box("#2563EB", 40));
+        btnChat.setLayoutParams(new LinearLayout.LayoutParams(0, 115, 1f));
+        btnChat.setOnClickListener(v -> showOfflineChatDialog());
+
+        ctrlRow.addView(btnPauseResume);
+        ctrlRow.addView(gap);
+        ctrlRow.addView(btnChat);
+        card.addView(ctrlRow);
+
+        tvChatLog = new TextView(this);
+        tvChatLog.setText("💬 Offline Chat Ready (No Internet Needed)");
+        tvChatLog.setTextColor(Color.parseColor("#94A3B8"));
+        tvChatLog.setPadding(0, 15, 0, 0);
+        card.addView(tvChatLog);
+
         return card;
+    }
+
+    private void showOfflineChatDialog() {
+        final EditText et = new EditText(this);
+        et.setHint("Type message or paste link...");
+        new AlertDialog.Builder(this)
+                .setTitle("💬 Send Offline Message")
+                .setView(et)
+                .setPositiveButton("Send", (d, w) -> {
+                    String msg = et.getText().toString().trim();
+                    if (!msg.isEmpty()) {
+                        engine.sendOfflineChatOrClipboard(connectedPeerIp, msg);
+                        tvChatLog.setText("💬 You: " + msg);
+                    }
+                })
+                .show();
+    }
+
+    private void showTransferModeDialog(String myIp) {
+        String[] modes = {
+                "⚡ Wi-Fi Direct (5GHz / 2.4GHz Auto-Fallback)",
+                "((📡)) Hotspot High-Speed Mode"
+        };
+        new AlertDialog.Builder(this)
+                .setTitle("Select Transfer Mode")
+                .setItems(modes, (d, which) -> {
+                    currentModeName = (which == 0) ? "Wi-Fi Direct" : "Hotspot";
+                    btnModeSwitch.setText("⇄ " + currentModeName);
+                    QrGenerator.displayLiveQr(qrView, myIp);
+                })
+                .show();
     }
 
     private void startRadarListen() {
         engine.scanRadar(new MultiTransferEngine.Callback() {
             @Override public void onRadarFound(String name, String ip) {
                 runOnUiThread(() -> {
-                    tvRadarPopup.setText("🟢 RECEIVER FOUND: " + name + " (" + ip + ")\n👉 TAP HERE TO SEND INSTANTLY!");
-                    tvRadarPopup.setTextColor(Color.parseColor("#16CC3E"));
+                    connectedPeerIp = ip;
+                    tvRadarPopup.setText("🟢 FOUND: " + name + " (" + ip + ")\n👉 TAP HERE FOR ZERO-CLICK SEND!");
+                    tvRadarPopup.setTextColor(Color.parseColor("#00E676"));
                     tvRadarPopup.setOnClickListener(v -> startSend(ip));
                 });
             }
@@ -323,26 +333,37 @@ public class ConnectTransferActivity extends AppCompatActivity {
     }
 
     private void startSend(String ip) {
-        tvStatus.setText("⚡ Sending to " + ip + "...");
-        engine.sendFiles(this, ip, AppSession.selectedQueue, callback("Sending"));
+        connectedPeerIp = ip;
+        tvStatus.setText("⚡ Preparing 2MB Smart Chunks for " + ip + "...");
+        List<AppSession.ShareItem> toSend = new ArrayList<>(AppSession.selectedQueue);
+
+        // If Auto-Zip is ON and user selected more than 3 files, pack into 1 high-speed bundle
+        if (AppSession.autoZipEnabled && toSend.size() > 3) {
+            File zip = MultiTransferEngine.createAutoZipBundle(this, toSend);
+            if (zip != null && zip.exists()) {
+                toSend.clear();
+                toSend.add(new AppSession.ShareItem(zip.getName(), zip.getAbsolutePath(), zip.length(), "ZIP"));
+            }
+        }
+        engine.sendFiles(this, ip, toSend, callback("Sending"));
     }
 
     private MultiTransferEngine.Callback callback(String tag) {
+        final long totalBatchBytes = Math.max(1, AppSession.getSelectedTotalBytes());
         return new MultiTransferEngine.Callback() {
             @Override public void onRadarFound(String n, String ip) {}
             @Override public void onProgress(String f, int i, int t, int p, double s) {
                 runOnUiThread(() -> {
-                    bar.setProgress(p);
-                    speedGraph.setSpeed(s);
+                    long remBytes = (totalBatchBytes * (100 - p)) / 100;
+                    liquidSphere.updateTransferState(p, s, remBytes);
                     tvSpeed.setText(String.format(Locale.US, "⚡ %.1f Mbps", s));
-                    tvStatus.setText(tag + " (" + i + "/" + t + "): " + f + " [" + p + "%]");
+                    tvStatus.setText(tag + " (" + i + "/" + t + "): " + f);
                 });
             }
             @Override public void onDone(int t, long b) {
                 runOnUiThread(() -> {
-                    bar.setProgress(100);
-                    speedGraph.setSpeed(0);
-                    tvStatus.setText("✅ Transfer Complete: " + t + " files (" + AppSession.formatSize(b) + ")");
+                    liquidSphere.updateTransferState(100, 0, 0);
+                    tvStatus.setText("✅ Completed: " + t + " files (" + AppSession.formatSize(b) + ")");
                 });
             }
             @Override public void onError(String m) {

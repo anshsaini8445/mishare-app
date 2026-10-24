@@ -37,10 +37,10 @@ public class WifiDirectEngine {
         try {
             WifiManager wm = (WifiManager) ctx.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
             if (wm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && wm.is5GHzBandSupported()) {
-                return "Dual-Band Active (5GHz / Wi-Fi 6 + 2.4GHz)";
+                return "5GHz Wi-Fi 6 + 2.4GHz Auto-Fallback";
             }
         } catch (Exception ignored) {}
-        return "2.4GHz Turbo Mode Active (Max Compatibility)";
+        return "2.4GHz Turbo + Hotspot Auto-Fallback";
     }
 
     @SuppressLint("MissingPermission")
@@ -53,16 +53,13 @@ public class WifiDirectEngine {
                         .setNetworkName("DIRECT-HYPERSHARE")
                         .setPassphrase("hyper1234");
 
-                if (supports5Ghz) {
-                    builder.setGroupOperatingBand(WifiP2pConfig.GROUP_OWNER_BAND_5GHZ);
-                } else {
-                    builder.setGroupOperatingBand(WifiP2pConfig.GROUP_OWNER_BAND_2GHZ);
-                }
+                builder.setGroupOperatingBand(supports5Ghz
+                        ? WifiP2pConfig.GROUP_OWNER_BAND_5GHZ
+                        : WifiP2pConfig.GROUP_OWNER_BAND_2GHZ);
 
                 manager.createGroup(channel, builder.build(), new WifiP2pManager.ActionListener() {
                     @Override public void onSuccess() {}
                     @Override public void onFailure(int reason) {
-                        // Automatic Fallback to 2.4GHz / Auto Band so it never fails on any phone
                         try {
                             WifiP2pConfig fallback = new WifiP2pConfig.Builder()
                                     .setNetworkName("DIRECT-HYPERSHARE")
@@ -76,7 +73,6 @@ public class WifiDirectEngine {
                     }
                 });
             } else {
-                // Android 5.0 to Android 9.0 automatic 2.4GHz / 5GHz group negotiation
                 manager.createGroup(channel, null);
             }
         } catch (Exception ignored) {}

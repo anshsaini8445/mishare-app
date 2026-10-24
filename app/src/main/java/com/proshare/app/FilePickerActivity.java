@@ -2,36 +2,51 @@ package com.proshare.app;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class FilePickerActivity extends AppCompatActivity {
 
-    private LinearLayout listContainer, subToggleRow;
+    private RecyclerView recyclerView;
+    private FastFileAdapter adapter;
+    private LinearLayout emptyStateBox;
     private Button btnSelectedCount, btnNextSend;
     private EditText etSearch;
     private final List<AppSession.ShareItem> currentItems = new ArrayList<>();
+    private final List<AppSession.ShareItem> filteredItems = new ArrayList<>();
     private final List<Button> tabButtons = new ArrayList<>();
-    private String currentTab = "FILES";
+    private final Map<String, Drawable> iconCache = new HashMap<>();
+    private final ExecutorService iconLoaderPool = Executors.newFixedThreadPool(4);
+    private String currentTab = "VIDEOS";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -40,7 +55,7 @@ public class FilePickerActivity extends AppCompatActivity {
             currentTab = getIntent().getStringExtra("START_TAB");
         }
         requestPerms();
-        setContentView(buildSmoothPickerUi());
+        setContentView(ThemeEngine.applyOneHandWrapper(this, buildZeroHangRecyclerUi()));
         switchCategory(currentTab);
     }
 
@@ -59,32 +74,32 @@ public class FilePickerActivity extends AppCompatActivity {
         }
     }
 
-    private View buildSmoothPickerUi() {
+    private View buildZeroHangRecyclerUi() {
         LinearLayout master = new LinearLayout(this);
         master.setOrientation(LinearLayout.VERTICAL);
-        master.setBackgroundColor(Color.WHITE);
+        master.setBackgroundColor(Color.parseColor(ThemeEngine.bg(this)));
 
-        // 1. Top Bar: ← Send + Rounded Search Pill (Video 00:06)
+        // 1. Top Search & Back Bar
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
         topBar.setPadding(35, 35, 35, 20);
 
-        TextView tvBack = UiHelper.makeTitle(this, "←  Send   ", "#0F172A", 20f);
+        TextView tvBack = UiHelper.makeTitle(this, "←  " + LangEngine.t(this, "SEND") + "  ", ThemeEngine.textMain(this), 19f);
         UiHelper.attachSmoothBounce(tvBack);
         tvBack.setOnClickListener(v -> finish());
 
         etSearch = new EditText(this);
-        etSearch.setHint("🔍 Search files, videos, apps...");
-        etSearch.setHintTextColor(Color.parseColor("#94A3B8"));
-        etSearch.setTextColor(Color.parseColor("#0F172A"));
+        etSearch.setHint("🔍 Search videos, apps, songs, files...");
+        etSearch.setHintTextColor(Color.parseColor(ThemeEngine.textSub(this)));
+        etSearch.setTextColor(Color.parseColor(ThemeEngine.textMain(this)));
         etSearch.setTextSize(14f);
-        etSearch.setBackground(UiHelper.box("#F1F5F9", 50));
+        etSearch.setBackground(UiHelper.bentoBox(ThemeEngine.card(this), ThemeEngine.accent(this), 50, 2));
         etSearch.setPadding(40, 22, 40, 22);
         etSearch.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
         etSearch.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { renderFastList(s.toString()); }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { filterList(s.toString()); }
             @Override public void afterTextChanged(Editable s) {}
         });
 
@@ -92,19 +107,19 @@ public class FilePickerActivity extends AppCompatActivity {
         topBar.addView(etSearch);
         master.addView(topBar);
 
-        // 2. Smooth Horizontal Tabs: History | Apps | Files | Videos | Photos | Songs (Video 00:07)
+        // 2. Category Tabs: HISTORY | APPS | VIDEOS | PHOTOS | SONGS | FILES
         HorizontalScrollView tabScroll = new HorizontalScrollView(this);
         tabScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout tabRow = new LinearLayout(this);
         tabRow.setOrientation(LinearLayout.HORIZONTAL);
         tabRow.setPadding(25, 10, 25, 15);
 
-        String[] tabs = {"HISTORY", "APPS", "FILES", "VIDEOS", "PHOTOS", "SONGS"};
+        String[] tabs = {"HISTORY", "APPS", "VIDEOS", "PHOTOS", "SONGS", "FILES"};
         for (String t : tabs) {
             Button b = new Button(this);
             b.setText(t);
             b.setAllCaps(false);
-            b.setTextSize(13f);
+            b.setTextSize(12.5f);
             b.setTypeface(null, Typeface.BOLD);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, 100);
             lp.setMargins(8, 0, 8, 0);
@@ -116,49 +131,86 @@ public class FilePickerActivity extends AppCompatActivity {
         tabScroll.addView(tabRow);
         master.addView(tabScroll);
 
-        // 3. Green Pill Sub-Toggle: [ Installed | Packages ] or [ Received | Send ] (Video 00:06 & 00:07)
-        subToggleRow = new LinearLayout(this);
-        subToggleRow.setOrientation(LinearLayout.HORIZONTAL);
-        subToggleRow.setGravity(Gravity.CENTER);
-        subToggleRow.setPadding(50, 15, 50, 15);
-        master.addView(subToggleRow);
+        // 3. Quick Action Strip: Select All + Auto-Zip Indicator
+        LinearLayout subRow = new LinearLayout(this);
+        subRow.setOrientation(LinearLayout.HORIZONTAL);
+        subRow.setGravity(Gravity.CENTER_VERTICAL);
+        subRow.setPadding(35, 5, 35, 10);
 
-        // 4. Instant Makkhan-Smooth File List
-        ScrollView scroll = new ScrollView(this);
-        scroll.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
-        listContainer = new LinearLayout(this);
-        listContainer.setOrientation(LinearLayout.VERTICAL);
-        listContainer.setPadding(35, 10, 35, 30);
-        scroll.addView(listContainer);
-        master.addView(scroll);
+        Button btnSelectAll = new Button(this);
+        btnSelectAll.setText("☑ Select All in Tab");
+        btnSelectAll.setAllCaps(false);
+        btnSelectAll.setTextColor(Color.parseColor(ThemeEngine.accent(this)));
+        btnSelectAll.setBackgroundColor(Color.TRANSPARENT);
+        btnSelectAll.setOnClickListener(v -> {
+            for (AppSession.ShareItem item : filteredItems) {
+                if (!AppSession.selectedQueue.contains(item)) AppSession.selectedQueue.add(item);
+            }
+            adapter.notifyDataSetChanged();
+            updateBottomBar();
+        });
 
-        // 5. Bottom Selection Bar: [ 0 SELECTED ]  [ NEXT / SEND ] (Video 00:08)
+        Button btnClear = new Button(this);
+        btnClear.setText("✖ Clear");
+        btnClear.setAllCaps(false);
+        btnClear.setTextColor(Color.parseColor(ThemeEngine.textSub(this)));
+        btnClear.setBackgroundColor(Color.TRANSPARENT);
+        btnClear.setOnClickListener(v -> {
+            AppSession.selectedQueue.clear();
+            adapter.notifyDataSetChanged();
+            updateBottomBar();
+        });
+
+        subRow.addView(btnSelectAll);
+        subRow.addView(btnClear);
+        master.addView(subRow);
+
+        // 4. Empty Robot Illustration Box (Shown when History or Tab is Empty)
+        emptyStateBox = new LinearLayout(this);
+        emptyStateBox.setOrientation(LinearLayout.VERTICAL);
+        emptyStateBox.setGravity(Gravity.CENTER);
+        emptyStateBox.setVisibility(View.GONE);
+        UiHelper.EmptyRobotRadarView robot = new UiHelper.EmptyRobotRadarView(this);
+        robot.setLayoutParams(new LinearLayout.LayoutParams(240, 220));
+        emptyStateBox.addView(robot);
+        emptyStateBox.addView(UiHelper.makeTitle(this, "No files in this tab yet!", ThemeEngine.textSub(this), 15f));
+        master.addView(emptyStateBox);
+
+        // 5. ZERO-HANG RECYCLERVIEW (Lazy Loads Only Visible Rows at 120 FPS!)
+        recyclerView = new RecyclerView(this);
+        recyclerView.setLayoutManager(new LinearLayoutManager(this));
+        recyclerView.setLayoutParams(new LinearLayout.LayoutParams(-1, 0, 1f));
+        adapter = new FastFileAdapter();
+        recyclerView.setAdapter(adapter);
+        master.addView(recyclerView);
+
+        // 6. Bottom Bar: [ X SELECTED ]  [ TURBO SEND ➔ ]
         LinearLayout bottomBar = new LinearLayout(this);
         bottomBar.setOrientation(LinearLayout.HORIZONTAL);
         bottomBar.setPadding(35, 22, 35, 22);
-        bottomBar.setBackground(UiHelper.bentoBox("#FFFFFF", "#E2E8F0", 0, 2));
+        bottomBar.setBackground(UiHelper.bentoBox(ThemeEngine.card(this), ThemeEngine.accent(this), 0, 2));
 
         btnSelectedCount = new Button(this);
         btnSelectedCount.setText("0 SELECTED");
         btnSelectedCount.setAllCaps(false);
-        btnSelectedCount.setTextColor(Color.parseColor("#64748B"));
-        btnSelectedCount.setBackground(UiHelper.bentoBox("#FFFFFF", "#CBD5E1", 60, 2));
+        btnSelectedCount.setTextColor(Color.parseColor(ThemeEngine.textMain(this)));
+        btnSelectedCount.setBackground(UiHelper.bentoBox(ThemeEngine.bg(this), ThemeEngine.accent(this), 60, 2));
         btnSelectedCount.setLayoutParams(new LinearLayout.LayoutParams(0, 130, 1f));
 
         View gap = new View(this);
-        gap.setLayoutParams(new LinearLayout.LayoutParams(30, 10));
+        gap.setLayoutParams(new LinearLayout.LayoutParams(25, 10));
 
         btnNextSend = new Button(this);
-        btnNextSend.setText("NEXT");
+        btnNextSend.setText("TURBO SEND ➔");
         btnNextSend.setAllCaps(false);
-        btnNextSend.setTextColor(Color.WHITE);
+        btnNextSend.setTextColor(Color.parseColor("#070B14"));
         btnNextSend.setTypeface(null, Typeface.BOLD);
-        btnNextSend.setBackground(UiHelper.box("#16CC3E", 60));
+        btnNextSend.setBackground(UiHelper.gradientBento("#00F5D4", "#10B981", 60));
         btnNextSend.setLayoutParams(new LinearLayout.LayoutParams(0, 130, 1f));
         UiHelper.attachSmoothBounce(btnNextSend);
         btnNextSend.setOnClickListener(v -> {
             if (AppSession.selectedQueue.isEmpty()) {
-                Toast.makeText(this, "Please select at least 1 item to share!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Select at least 1 file to share!", Toast.LENGTH_SHORT).show();
                 return;
             }
             Intent i = new Intent(this, ConnectTransferActivity.class);
@@ -179,116 +231,167 @@ public class FilePickerActivity extends AppCompatActivity {
         currentTab = tab;
         for (Button b : tabButtons) {
             boolean active = b.getText().toString().equals(tab);
-            b.setTextColor(Color.parseColor(active ? "#16CC3E" : "#475569"));
-            b.setBackground(UiHelper.box(active ? "#E8F8EE" : "#F8FAFC", 40));
+            b.setTextColor(Color.parseColor(active ? "#070B14" : ThemeEngine.textMain(this)));
+            b.setBackground(UiHelper.box(active ? ThemeEngine.accent(this) : ThemeEngine.card(this), 40));
         }
 
-        // Update Green Pill Toggle (Installed/Packages or Received/Send)
-        subToggleRow.removeAllViews();
-        String leftLabel = "APPS".equals(tab) ? "Installed" : ("HISTORY".equals(tab) ? "Received" : "All " + tab);
-        String rightLabel = "APPS".equals(tab) ? "Packages" : ("HISTORY".equals(tab) ? "Send" : "Select All");
-
-        Button bLeft = new Button(this);
-        bLeft.setText(leftLabel);
-        bLeft.setAllCaps(false);
-        bLeft.setTextColor(Color.WHITE);
-        bLeft.setBackground(UiHelper.box("#16CC3E", 45));
-        bLeft.setLayoutParams(new LinearLayout.LayoutParams(0, 95, 1f));
-
-        Button bRight = new Button(this);
-        bRight.setText(rightLabel);
-        bRight.setAllCaps(false);
-        bRight.setTextColor(Color.parseColor("#16CC3E"));
-        bRight.setBackground(UiHelper.bentoBox("#FFFFFF", "#16CC3E", 45, 2));
-        bRight.setLayoutParams(new LinearLayout.LayoutParams(0, 95, 1f));
-        bRight.setOnClickListener(v -> {
-            for (AppSession.ShareItem item : currentItems) {
-                if (!AppSession.selectedQueue.contains(item)) AppSession.selectedQueue.add(item);
-            }
-            renderFastList(etSearch.getText().toString());
-            updateBottomBar();
-        });
-
-        subToggleRow.addView(bLeft);
-        subToggleRow.addView(bRight);
-
-        // Load instantaneously from RAM Cache, or fetch on background thread
-        String queryTab = "HISTORY".equals(tab) ? "FILES" : tab;
-        if (AppSession.ramCache.containsKey(queryTab)) {
-            currentItems.clear();
-            currentItems.addAll(AppSession.ramCache.get(queryTab));
-            renderFastList(etSearch.getText().toString());
-        } else {
-            Executors.newSingleThreadExecutor().execute(() -> {
-                List<AppSession.ShareItem> loaded = AppSession.getCategoryItems(this, queryTab);
-                runOnUiThread(() -> {
-                    currentItems.clear();
-                    currentItems.addAll(loaded);
-                    renderFastList(etSearch.getText().toString());
-                });
+        iconLoaderPool.execute(() -> {
+            List<AppSession.ShareItem> loaded = AppSession.getCategoryItems(this, tab);
+            runOnUiThread(() -> {
+                currentItems.clear();
+                currentItems.addAll(loaded);
+                filterList(etSearch.getText().toString());
             });
-        }
+        });
     }
 
-    private void renderFastList(String query) {
-        listContainer.removeAllViews();
-        String q = query.toLowerCase().trim();
-
+    private void filterList(String q) {
+        String query = q.toLowerCase().trim();
+        filteredItems.clear();
         for (AppSession.ShareItem item : currentItems) {
-            if (!q.isEmpty() && !item.name.toLowerCase().contains(q)) continue;
+            if (query.isEmpty() || item.name.toLowerCase().contains(query)) {
+                filteredItems.add(item);
+            }
+        }
+        emptyStateBox.setVisibility(filteredItems.isEmpty() ? View.VISIBLE : View.GONE);
+        adapter.notifyDataSetChanged();
+    }
 
-            LinearLayout row = new LinearLayout(this);
+    private void updateBottomBar() {
+        int count = AppSession.selectedQueue.size();
+        long bytes = AppSession.getSelectedTotalBytes();
+        btnSelectedCount.setText(count + " (" + AppSession.formatSize(bytes) + ")");
+    }
+
+    // RECYCLERVIEW ADAPTER WITH ASYNC ICON LOADING (ZERO UI BLOCKING!)
+    private class FastFileAdapter extends RecyclerView.Adapter<FastFileAdapter.VH> {
+
+        class VH extends RecyclerView.ViewHolder {
+            LinearLayout row;
+            ImageView iconView;
+            TextView tvName, tvSub;
+            Button btnPlay;
+            CheckBox cb;
+
+            VH(LinearLayout itemView) {
+                super(itemView);
+                this.row = itemView;
+                this.iconView = (ImageView) itemView.getChildAt(0);
+                LinearLayout col = (LinearLayout) itemView.getChildAt(1);
+                this.tvName = (TextView) col.getChildAt(0);
+                this.tvSub = (TextView) col.getChildAt(1);
+                this.btnPlay = (Button) itemView.getChildAt(2);
+                this.cb = (CheckBox) itemView.getChildAt(3);
+            }
+        }
+
+        @NonNull
+        @Override
+        public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            LinearLayout row = new LinearLayout(FilePickerActivity.this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(20, 22, 20, 22);
-            row.setBackground(UiHelper.bentoBox("#FFFFFF", "#F1F5F9", 28, 2));
-            LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(-1, -2);
-            rLp.bottomMargin = 14;
-            row.setLayoutParams(rLp);
+            row.setPadding(25, 20, 25, 20);
+            RecyclerView.LayoutParams lp = new RecyclerView.LayoutParams(-1, -2);
+            lp.setMargins(25, 8, 25, 8);
+            row.setLayoutParams(lp);
 
-            // Clean File Icon Badge (Like Yellow File Icon in Video 00:08)
-            TextView iconBadge = UiHelper.makeTitle(this, "APPS".equals(item.category) ? "📦" : ("VIDEOS".equals(item.category) ? "🎬" : "📁"), "#FFFFFF", 18f);
-            iconBadge.setGravity(Gravity.CENTER);
-            iconBadge.setBackground(UiHelper.box("#FACC15", 22));
-            iconBadge.setLayoutParams(new LinearLayout.LayoutParams(105, 105));
+            ImageView iv = new ImageView(FilePickerActivity.this);
+            iv.setLayoutParams(new LinearLayout.LayoutParams(105, 105));
+            iv.setBackground(UiHelper.box("#2563EB", 24));
+            iv.setPadding(12, 12, 12, 12);
 
-            LinearLayout textCol = new LinearLayout(this);
+            LinearLayout textCol = new LinearLayout(FilePickerActivity.this);
             textCol.setOrientation(LinearLayout.VERTICAL);
-            textCol.setPadding(28, 0, 15, 0);
+            textCol.setPadding(25, 0, 15, 0);
             textCol.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1f));
 
-            TextView tvName = UiHelper.makeTitle(this, item.name, "#0F172A", 14.5f);
+            TextView tvName = UiHelper.makeTitle(FilePickerActivity.this, "", ThemeEngine.textMain(FilePickerActivity.this), 14f);
             tvName.setMaxLines(1);
-            TextView tvSize = new TextView(this);
-            tvSize.setText(AppSession.formatSize(item.size));
-            tvSize.setTextColor(Color.parseColor("#94A3B8"));
-            tvSize.setTextSize(12.5f);
+            TextView tvSub = new TextView(FilePickerActivity.this);
+            tvSub.setTextSize(12f);
             textCol.addView(tvName);
-            textCol.addView(tvSize);
+            textCol.addView(tvSub);
 
-            CheckBox cb = new CheckBox(this);
-            cb.setChecked(AppSession.selectedQueue.contains(item));
-            cb.setOnCheckedChangeListener((b, checked) -> {
+            Button btnPlay = new Button(FilePickerActivity.this);
+            btnPlay.setText("▶️");
+            btnPlay.setBackground(UiHelper.box("#1E293B", 25));
+            btnPlay.setTextColor(Color.WHITE);
+            btnPlay.setLayoutParams(new LinearLayout.LayoutParams(95, 90));
+
+            CheckBox cb = new CheckBox(FilePickerActivity.this);
+
+            row.addView(iv);
+            row.addView(textCol);
+            row.addView(btnPlay);
+            row.addView(cb);
+            return new VH(row);
+        }
+
+        @Override
+        public void onBindViewHolder(@NonNull VH h, int position) {
+            final AppSession.ShareItem item = filteredItems.get(position);
+            boolean isSel = AppSession.selectedQueue.contains(item);
+
+            h.row.setBackground(UiHelper.bentoBox(ThemeEngine.card(FilePickerActivity.this),
+                    isSel ? ThemeEngine.accent(FilePickerActivity.this) : "#1E293B", 28, isSel ? 3 : 1));
+            h.tvName.setText(item.name);
+            h.tvName.setTextColor(Color.parseColor(ThemeEngine.textMain(FilePickerActivity.this)));
+            h.tvSub.setText(AppSession.formatSize(item.size) + "  •  " + item.dateStr);
+            h.tvSub.setTextColor(Color.parseColor(ThemeEngine.textSub(FilePickerActivity.this)));
+
+            // Async Lazy Icon Loader for APKs so scrolling never stutters
+            h.iconView.setTag(item.path);
+            if (iconCache.containsKey(item.path)) {
+                h.iconView.setImageDrawable(iconCache.get(item.path));
+            } else {
+                h.iconView.setImageDrawable(null);
+                if ("APPS".equals(item.category)) {
+                    iconLoaderPool.execute(() -> {
+                        try {
+                            PackageManager pm = getPackageManager();
+                            PackageInfo pi = pm.getPackageArchiveInfo(item.path, 0);
+                            if (pi != null && pi.applicationInfo != null) {
+                                pi.applicationInfo.sourceDir = item.path;
+                                pi.applicationInfo.publicSourceDir = item.path;
+                                final Drawable d = pi.applicationInfo.loadIcon(pm);
+                                if (d != null) {
+                                    iconCache.put(item.path, d);
+                                    runOnUiThread(() -> {
+                                        if (item.path.equals(h.iconView.getTag())) {
+                                            h.iconView.setImageDrawable(d);
+                                        }
+                                    });
+                                }
+                            }
+                        } catch (Exception ignored) {}
+                    });
+                }
+            }
+
+            // In-App Media Player Button
+            h.btnPlay.setOnClickListener(v -> SuperToolsDialog.openInAppMediaPlayer(FilePickerActivity.this, item));
+
+            h.cb.setOnCheckedChangeListener(null);
+            h.cb.setChecked(isSel);
+            h.cb.setOnCheckedChangeListener((b, checked) -> {
+                HapticSoundEngine.tick(b);
                 if (checked) {
                     if (!AppSession.selectedQueue.contains(item)) AppSession.selectedQueue.add(item);
                 } else {
                     AppSession.selectedQueue.remove(item);
                 }
+                h.row.setBackground(UiHelper.bentoBox(ThemeEngine.card(FilePickerActivity.this),
+                        checked ? ThemeEngine.accent(FilePickerActivity.this) : "#1E293B", 28, checked ? 3 : 1));
                 updateBottomBar();
             });
 
-            row.setOnClickListener(v -> cb.setChecked(!cb.isChecked()));
-            row.addView(iconBadge);
-            row.addView(textCol);
-            row.addView(cb);
-            listContainer.addView(row);
+            h.row.setOnClickListener(v -> h.cb.setChecked(!h.cb.isChecked()));
         }
-    }
 
-    private void updateBottomBar() {
-        int count = AppSession.selectedQueue.size();
-        btnSelectedCount.setText(count + " SELECTED");
-        btnSelectedCount.setTextColor(Color.parseColor(count > 0 ? "#16CC3E" : "#64748B"));
-        btnNextSend.setText(count > 0 ? "SEND" : "NEXT");
+        @Override
+        public int getItemCount() {
+            return filteredItems.size();
+        }
     }
 }

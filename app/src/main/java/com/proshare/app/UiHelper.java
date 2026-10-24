@@ -34,12 +34,13 @@ public class UiHelper {
     }
 
     // Glassmorphism Frosted Card Effect
-    public static GradientDrawable glassBox(Context ctx, int radius) {
-        boolean light = ThemeEngine.isLightTheme(ctx);
-        GradientDrawable gd = new GradientDrawable();
-        gd.setColor(Color.parseColor(light ? "#E6FFFFFF" : "#D911192E"));
+    public static GradientDrawable glassCard(String borderHex, int radius) {
+        GradientDrawable gd = new GradientDrawable(
+                GradientDrawable.Orientation.TL_BR,
+                new int[]{Color.parseColor("#CC162238"), Color.parseColor("#990F172A")}
+        );
         gd.setCornerRadius(radius);
-        gd.setStroke(2, Color.parseColor(ThemeEngine.accent(ctx)));
+        gd.setStroke(3, Color.parseColor(borderHex));
         return gd;
     }
 
@@ -69,7 +70,7 @@ public class UiHelper {
             int action = event.getAction();
             if (action == MotionEvent.ACTION_DOWN) {
                 HapticSoundEngine.tick(view);
-                view.animate().scaleX(0.94f).scaleY(0.94f).setDuration(85).start();
+                view.animate().scaleX(0.93f).scaleY(0.93f).setDuration(85).start();
             } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
                 view.animate().scaleX(1f).scaleY(1f).setDuration(120).start();
             }
@@ -87,10 +88,10 @@ public class UiHelper {
         b.setAllCaps(false);
         b.setTextColor(Color.parseColor(textHex));
         b.setTypeface(null, Typeface.BOLD);
-        b.setBackground(box(bgHex, 55));
+        b.setBackground(box(bgHex, 60));
         attachSmoothBounce(b);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, 132);
-        lp.topMargin = 16;
+        lp.topMargin = 18;
         b.setLayoutParams(lp);
         return b;
     }
@@ -104,14 +105,14 @@ public class UiHelper {
         return tv;
     }
 
-    // 3D LIQUID WAVE SPHERE PROGRESS BAR WITH EXACT ETA TIMER & PERCENTAGE
+    // 1. 3D LIQUID WAVE SPHERE PROGRESS BAR (With Percentage % + Speed + Exact ETA Time Remaining)
     public static class LiquidWaveSphereView extends View {
         private final Paint ringPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint wave1Paint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint wave2Paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint wavePaint1 = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint wavePaint2 = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint subPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Path clipPath = new Path();
+        private final Paint subTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path clipCircle = new Path();
         private final Path wavePath1 = new Path();
         private final Path wavePath2 = new Path();
 
@@ -126,36 +127,38 @@ public class UiHelper {
             ringPaint.setStyle(Paint.Style.STROKE);
             ringPaint.setStrokeWidth(8f);
 
-            wave1Paint.setColor(Color.parseColor("#6600F5D4"));
-            wave1Paint.setStyle(Paint.Style.FILL);
+            wavePaint1.setColor(Color.parseColor("#6600F5D4"));
+            wavePaint1.setStyle(Paint.Style.FILL);
 
-            wave2Paint.setColor(Color.parseColor("#B310B981"));
-            wave2Paint.setStyle(Paint.Style.FILL);
+            wavePaint2.setColor(Color.parseColor("#CC10B981"));
+            wavePaint2.setStyle(Paint.Style.FILL);
 
             textPaint.setColor(Color.WHITE);
             textPaint.setTextSize(54f);
             textPaint.setTypeface(Typeface.DEFAULT_BOLD);
             textPaint.setTextAlign(Paint.Align.CENTER);
 
-            subPaint.setColor(Color.parseColor("#FACC15"));
-            subPaint.setTextSize(28f);
-            subPaint.setTypeface(Typeface.DEFAULT_BOLD);
-            subPaint.setTextAlign(Paint.Align.CENTER);
+            subTextPaint.setColor(Color.parseColor("#FACC15"));
+            subTextPaint.setTextSize(26f);
+            subTextPaint.setTypeface(Typeface.DEFAULT_BOLD);
+            subTextPaint.setTextAlign(Paint.Align.CENTER);
         }
 
-        public void updateLiquidProgress(int pct, double mbps, long remainingBytes) {
+        public void updateTransferState(int pct, double mbps, long remainingBytes) {
             this.percent = Math.max(0, Math.min(100, pct));
             this.speedMbps = mbps;
             double bytesPerSec = (mbps * 1048576.0) / 8.0;
             if (pct >= 100) {
-                this.etaText = "✅ Completed!";
+                this.etaText = "✅ Completed (0s left)";
             } else if (bytesPerSec > 1024 && remainingBytes > 0) {
-                long sec = Math.max(1, (long) (remainingBytes / bytesPerSec));
+                long sec = (long) (remainingBytes / bytesPerSec);
                 long min = sec / 60;
-                long remSec = sec % 60;
-                this.etaText = String.format(Locale.US, "⏱️ %02dm %02ds left", min, remSec);
+                long remS = sec % 60;
+                this.etaText = min > 0
+                        ? String.format(Locale.US, "⏱️ %dm %02ds left", min, remS)
+                        : String.format(Locale.US, "⏱️ %ds left", Math.max(1, remS));
             } else {
-                this.etaText = "⚡ Turbo Streaming...";
+                this.etaText = "⏱️ Calculating time...";
             }
             invalidate();
         }
@@ -169,17 +172,16 @@ public class UiHelper {
 
             float cx = w / 2f;
             float cy = h / 2f;
-            float r = Math.min(cx, cy) - 12f;
+            float r = Math.min(cx, cy) - 14f;
 
             canvas.save();
-            clipPath.reset();
-            clipPath.addCircle(cx, cy, r, Path.Direction.CW);
-            canvas.clipPath(clipPath);
-
-            canvas.drawColor(Color.parseColor("#0B132B"));
+            clipCircle.reset();
+            clipCircle.addCircle(cx, cy, r, Path.Direction.CW);
+            canvas.clipPath(clipCircle);
+            canvas.drawColor(Color.parseColor("#0F172A"));
 
             float waterLevel = (cy + r) - ((percent / 100f) * (2f * r));
-            float amp = Math.max(10f, Math.min(28f, (float) (speedMbps / 8.0) + 10f));
+            float waveAmp = (float) Math.min(22.0, Math.max(6.0, speedMbps / 8.0));
 
             wavePath1.reset();
             wavePath2.reset();
@@ -187,8 +189,8 @@ public class UiHelper {
             wavePath2.moveTo(cx - r, cy + r);
 
             for (float x = cx - r; x <= cx + r; x += 12) {
-                float y1 = waterLevel + (float) Math.sin(((x - (cx - r)) * 0.03f) + phase) * amp;
-                float y2 = waterLevel + (float) Math.cos(((x - (cx - r)) * 0.03f) - phase) * amp;
+                float y1 = waterLevel + (float) Math.sin((x * 0.03f) + phase) * waveAmp;
+                float y2 = waterLevel + (float) Math.cos((x * 0.03f) - phase) * waveAmp;
                 wavePath1.lineTo(x, y1);
                 wavePath2.lineTo(x, y2);
             }
@@ -197,50 +199,49 @@ public class UiHelper {
             wavePath2.lineTo(cx + r, cy + r);
             wavePath2.close();
 
-            canvas.drawPath(wavePath1, wave1Paint);
-            canvas.drawPath(wavePath2, wave2Paint);
-
-            canvas.drawText(percent + "%", cx, cy - 10f, textPaint);
-            canvas.drawText(String.format(Locale.US, "⚡ %.1f Mbps", speedMbps), cx, cy + 32f, subPaint);
-            canvas.drawText(etaText, cx, cy + 72f, subPaint);
-
+            canvas.drawPath(wavePath1, wavePaint1);
+            canvas.drawPath(wavePath2, wavePaint2);
             canvas.restore();
-            canvas.drawCircle(cx, cy, r, ringPaint);
 
-            phase += 0.20f;
-            postInvalidateDelayed(35);
+            canvas.drawCircle(cx, cy, r, ringPaint);
+            canvas.drawText(percent + "%", cx, cy - 10f, textPaint);
+            canvas.drawText(etaText, cx, cy + 38f, subTextPaint);
+
+            phase += (speedMbps > 50) ? 0.32f : 0.16f;
+            postInvalidateDelayed(30);
         }
     }
 
-    // EMPTY STATE ANIMATED 3D ROBOT / RADAR ILLUSTRATION
-    public static class EmptyRobotView extends View {
+    // 2. 3D ANIMATED ROBOT / RADAR EMPTY STATE VIEW
+    public static class EmptyRobotRadarView extends View {
         private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private float floatY = 0f;
-        private boolean up = true;
+        private float bounce = 0f;
 
-        public EmptyRobotView(Context ctx) { super(ctx); }
+        public EmptyRobotRadarView(Context ctx) {
+            super(ctx);
+        }
 
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
             float cx = getWidth() / 2f;
-            float cy = (getHeight() / 2f) + floatY;
+            float cy = getHeight() / 2f + (float) Math.sin(bounce) * 10f;
 
             p.setColor(Color.parseColor("#1E293B"));
-            canvas.drawRoundRect(new RectF(cx - 70, cy - 55, cx + 70, cy + 45), 28, 28, p);
+            canvas.drawRoundRect(new RectF(cx - 70, cy - 55, cx + 70, cy + 55), 28, 28, p);
+
             p.setColor(Color.parseColor("#00F5D4"));
-            canvas.drawCircle(cx - 28, cy - 12, 12, p);
-            canvas.drawCircle(cx + 28, cy - 12, 12, p);
+            canvas.drawCircle(cx - 26, cy - 8, 12, p);
+            canvas.drawCircle(cx + 26, cy - 8, 12, p);
             canvas.drawLine(cx, cy - 55, cx, cy - 85, p);
             canvas.drawCircle(cx, cy - 90, 10, p);
 
-            floatY += up ? -0.8f : 0.8f;
-            if (floatY < -12) up = false;
-            if (floatY > 12) up = true;
+            bounce += 0.12f;
             postInvalidateDelayed(40);
         }
     }
 
+    // Keep existing custom views for 100% compatibility
     public static class HeroCircleView extends View {
         private final Paint bgPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint iconPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -299,7 +300,9 @@ public class UiHelper {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            int w = getWidth(), h = getHeight(), len = 55;
+            int w = getWidth();
+            int h = getHeight();
+            int len = 55;
             canvas.drawLine(10, 10, 10 + len, 10, cornerPaint);
             canvas.drawLine(10, 10, 10, 10 + len, cornerPaint);
             canvas.drawLine(w - 10 - len, 10, w - 10, 10, cornerPaint);
@@ -319,7 +322,8 @@ public class UiHelper {
         private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint fillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Path wavePath = new Path();
-        private float phase = 0f, currentSpeed = 10f;
+        private float phase = 0f;
+        private float currentSpeed = 10f;
 
         public LiveSpeedGraphView(Context context) {
             super(context);
@@ -338,14 +342,16 @@ public class UiHelper {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            int w = getWidth(), h = getHeight();
+            int w = getWidth();
+            int h = getHeight();
             if (w == 0 || h == 0) return;
             wavePath.reset();
             float midY = h * 0.6f;
             float amp = Math.min(h * 0.35f, (currentSpeed / 200f) * (h * 0.35f) + 10f);
             wavePath.moveTo(0, h);
             for (int x = 0; x <= w; x += 15) {
-                wavePath.lineTo(x, midY + (float) Math.sin((x * 0.025f) + phase) * amp);
+                float y = midY + (float) Math.sin((x * 0.025f) + phase) * amp;
+                wavePath.lineTo(x, y);
             }
             wavePath.lineTo(w, h);
             wavePath.close();
@@ -373,7 +379,9 @@ public class UiHelper {
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            float cx = getWidth() / 2f, cy = getHeight() / 2f, r = Math.min(cx, cy) - 8f;
+            float cx = getWidth() / 2f;
+            float cy = getHeight() / 2f;
+            float r = Math.min(cx, cy) - 8f;
             canvas.drawCircle(cx, cy, r, circlePaint);
             oval.set(cx - r, cy - r, cx + r, cy + r);
             canvas.drawArc(oval, angle, 95f, true, arcPaint);

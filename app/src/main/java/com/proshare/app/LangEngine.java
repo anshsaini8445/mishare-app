@@ -17,7 +17,7 @@ public class LangEngine {
     public static int getLangIndex(Context ctx) {
         SharedPreferences sp = ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE);
         if (!sp.contains("lang_idx")) {
-            // Auto-detect phone's default language on first launch
+            // Auto-detect phone language on first launch
             String sys = Locale.getDefault().getLanguage();
             for (int i = 0; i < CODES.length; i++) {
                 if (CODES[i].equalsIgnoreCase(sys)) {
@@ -30,7 +30,11 @@ public class LangEngine {
     }
 
     public static void setLangIndex(Context ctx, int idx) {
-        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putInt("lang_idx", idx).apply();
+        ctx.getSharedPreferences(PREF, Context.MODE_PRIVATE).edit().putInt("lang_idx", idx % NAMES.length).apply();
+    }
+
+    public static void nextLanguage(Context ctx) {
+        setLangIndex(ctx, (getLangIndex(ctx) + 1) % NAMES.length);
     }
 
     public static String getCurrentLangName(Context ctx) {
@@ -39,23 +43,26 @@ public class LangEngine {
 
     public static String t(Context ctx, String key) {
         int i = getLangIndex(ctx);
-        switch (key) {
-            case "SEND":
-                return new String[]{"SEND", "भेजें (Send)", "পাঠান", "पाठवा", "పంపు", "அனுப்பு", "મોકલો", "ਭੇਜੋ", "ENVIAR", "إرسال", "ОТПРАВИТЬ"}[i];
-            case "RECEIVE":
-                return new String[]{"RECEIVE", "प्राप्त करें", "গ্রহণ করুন", "स्वीकारा", "స్వీకరించు", "பெறு", "મેળવો", "ਪ੍ਰਾਪਤ ਕਰੋ", "RECIBIR", "استلام", "ПОЛУЧИТЬ"}[i];
-            case "HISTORY":
-                return new String[]{"🕒 History Vault", "🕒 हिस्ट्री वॉल्ट", "🕒 হিস্ট্রি", "🕒 हिस्ट्री", "🕒 హిస్టరీ", "🕒 வரலாறு", "🕒 હિસ્ટ્રી", "🕒 ਹਿਸਟਰੀ", "🕒 Historial", "🕒 السجل", "🕒 История"}[i];
-            case "PC_CONNECT":
-                return new String[]{"💻 TV / PC Hub", "💻 टीवी / पीसी हब", "💻 টিভি/পিসি", "💻 टीव्ही/पीसी", "💻 టీవీ/పీసీ", "💻 டிவி/பிசி", "💻 ટીવી/પીસી", "💻 ਟੀਵੀ/ਪੀਸੀ", "💻 TV / PC", "💻 التلفاز والكمبيوتر", "💻 ТВ и ПК"}[i];
-            case "ONE_HAND":
-                return new String[]{"🖐️ ONE-HAND MODE", "🖐️ एक हाथ मोड (One-Hand)", "🖐️ এক হাত মোড", "🖐️ एक हात मोड", "🖐️ వన్-హ్యాండ్", "🖐️ ஒரு கை முறை", "🖐️ વન-હેન્ડ મોડ", "🖐️ ਵਨ-ਹੈਂਡ ਮੋਡ", "🖐️ UNA MANO", "🖐️ وضع اليد الواحدة", "🖐️ ОДНОЙ РУКОЙ"}[i];
-            case "SUPER_TOOLS":
-                return new String[]{"🛠️ Super Tools & Phone Clone", "🛠️ सुपर टूल्स और फोन क्लोन", "🛠️ সুপার টুলস ও ক্লোন", "🛠️ सुपर टूल्स व क्लोन", "🛠️ సూపర్ టూల్స్", "🛠️ சூப்பர் கருவிகள்", "🛠️ સુપર ટૂલ્સ", "🛠️ ਸੁਪਰ ਟੂਲਸ", "🛠️ Súper Herramientas", "🛠️ أدوات واستنساخ", "🛠️ Супер Инструменты"}[i];
-            case "SETTINGS":
-                return new String[]{"⚙️ Settings & Themes", "⚙️ सेटिंग्स, भाषा और थीम्स", "⚙️ সেটিংস ও থিম", "⚙️ सेटिंग्ज आणि थीम", "⚙️ సెట్టింగ్‌లు", "⚙️ அமைப்புகள்", "⚙️ સેટિંગ્સ", "⚙️ ਸੈਟਿੰਗਾਂ", "⚙️ Ajustes y Temas", "⚙️ الإعدادات والسمات", "⚙️ Настройки и Темы"}[i];
-            default:
-                return key;
+        if ("SEND".equals(key)) {
+            String[] v = {"SEND", "भेजें (Send)", "পাঠান", "पाठवा", "పంపు", "அனுப்பு", "મોકલો", "ਭੇਜੋ", "ENVIAR", "إرسال", "ОТПРАВИТЬ"};
+            return v[i];
         }
+        if ("RECEIVE".equals(key)) {
+            String[] v = {"RECEIVE", "प्राप्त करें", "গ্রহণ করুন", "स्वीकारा", "స్వీకరించు", "பெறு", "મેળવો", "ਪ੍ਰਾਪਤ ਕਰੋ", "RECIBIR", "استلام", "ПОЛУЧИТЬ"};
+            return v[i];
+        }
+        if ("ONE_HAND".equals(key)) {
+            String[] v = {"✨ ONE-HAND MODE", "✨ एक हाथ मोड (One-Hand)", "✨ এক হাত মোড", "✨ एक हात मोड", "✨ వన్-హ్యాండ్ మోడ్", "✨ ஒரு கை முறை", "✨ વન-હેન્ડ મોડ", "✨ ਵਨ-ਹੈਂਡ ਮੋਡ", "✨ MODO UNA MANO", "✨ وضع اليد الواحدة", "✨ ОДНОЙ РУКОЙ"};
+            return v[i];
+        }
+        if ("SUPER_TOOLS".equals(key)) {
+            String[] v = {"🛠️ Super Tools & Phone Clone", "🛠️ सुपर टूल्स व फोन क्लोन", "🛠️ সুপার টুলস", "🛠️ सुपर टूल्स", "🛠️ సూపర్ టూల్స్", "🛠️ சூப்பர் கருவிகள்", "🛠️ સુપર ટૂલ્સ", "🛠️ ਸੁਪਰ ਟੂਲਸ", "🛠️ Súper Herramientas", "🛠️ أدوات خارقة", "🛠️ Супер Инструменты"};
+            return v[i];
+        }
+        if ("HISTORY".equals(key)) {
+            String[] v = {"🕒 History Vault", "🕒 हिस्ट्री वॉल्ट", "🕒 হিস্ট্রি", "🕒 हिस्ट्री", "🕒 హిస్టరీ", "🕒 வரலாறு", "🕒 હિસ્ટ્રી", "🕒 ਹਿਸਟਰੀ", "🕒 Historial", "🕒 السجل", "🕒 История"};
+            return v[i];
+        }
+        return key;
     }
 }

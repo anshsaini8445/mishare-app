@@ -2,10 +2,10 @@ package com.proshare.app;
 
 import android.app.ActivityManager;
 import android.content.Context;
+import android.media.MediaScannerConnection;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.PowerManager;
-import android.text.format.Formatter;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
@@ -13,9 +13,9 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -25,14 +25,11 @@ import java.net.Socket;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 
 public class MultiTransferEngine {
 
     public static final int PORT = 9091;
     public static final int RADAR_PORT = 9092;
-    public static final int CHAT_PORT = 9093;
     public static final int WEB_PORT = 8080;
 
     private final ExecutorService pool = Executors.newFixedThreadPool(8);
@@ -40,23 +37,17 @@ public class MultiTransferEngine {
     private volatile boolean paused = false;
     private ServerSocket serverSocket;
     private ServerSocket webSocket;
-    private ServerSocket chatServer;
     private DatagramSocket radarSocket;
     private WifiManager.WifiLock wifiLock;
     private PowerManager.WakeLock wakeLock;
 
     public interface Callback {
-        void onRadarFound(String model, String ip);
-        void onProgress(String name, int current, int total, int percent, double speedMbps);
+        void onRadarFound(String model, String ip, String ssid, String pass);
+        void onProgress(String name, int current, int total, int percent, double speedMbps, long remainingBytes);
         void onDone(int totalFiles, long totalBytes);
         void onError(String err);
     }
 
-    public interface ChatListener {
-        void onMessageReceived(String sender, String message);
-    }
-
-    // Pause & Resume Control for 2MB Chunk Engine
     public void togglePause() {
         paused = !paused;
     }
@@ -67,11 +58,10 @@ public class MultiTransferEngine {
 
     private void waitIfPaused() {
         while (paused && active) {
-            try { Thread.sleep(200); } catch (Exception ignored) {}
+            try { Thread.sleep(150); } catch (Exception ignored) {}
         }
     }
 
-    // Smart 2MB Chunking & Dynamic RAM Scaling
     public static int getDynamicBufferSize(Context ctx) {
         try {
             ActivityManager am = (ActivityManager) ctx.getSystemService(Context.ACTIVITY_SERVICE);
@@ -79,38 +69,12 @@ public class MultiTransferEngine {
             if (am != null) {
                 am.getMemoryInfo(mi);
                 long freeMb = mi.availMem / (1024 * 1024);
-                if (freeMb > 1200) return 2097152; // 2 MB Smart Chunk
-                if (freeMb > 600) return 1048576;  // 1 MB Chunk
-                if (freeMb > 300) return 524288;   // 512 KB Chunk
+                if (freeMb > 1200) return 2097152; // 2 MB High-Speed Buffer
+                if (freeMb > 600) return 1048576;  // 1 MB Buffer
+                if (freeMb > 300) return 524288;   // 512 KB Buffer
             }
         } catch (Exception ignored) {}
-        return 262144; // 256 KB Safe Chunk for Android 5
-    }
-
-    // Auto-Zip Engine: Packs multiple files into 1 high-speed Zip bundle
-    public static File createAutoZipBundle(Context ctx, List<AppSession.ShareItem> items) {
-        try {
-            File zipFile = new File(ctx.getCacheDir(), "HyperShare_Bundle_" + System.currentTimeMillis() + ".zip");
-            try (ZipOutputStream zos = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(zipFile)))) {
-                zos.setLevel(AppSession.smartCompressEnabled ? 6 : 1);
-                byte[] buf = new byte[131072];
-                for (AppSession.ShareItem item : items) {
-                    File f = new File(item.path);
-                    if (!f.exists()) continue;
-                    zos.putNextEntry(new ZipEntry(item.name));
-                    try (FileInputStream fis = new FileInputStream(f)) {
-                        int r;
-                        while ((r = fis.read(buf)) != -1) {
-                            zos.write(buf, 0, r);
-                        }
-                    }
-                    zos.closeEntry();
-                }
-            }
-            return zipFile;
-        } catch (Exception e) {
-            return null;
-        }
+        return 262144;
     }
 
     private void acquireHardwareLocks(Context ctx) {
@@ -136,76 +100,54 @@ public class MultiTransferEngine {
         paused = false;
         try { if (serverSocket != null) serverSocket.close(); } catch (Exception ignored) {}
         try { if (webSocket != null) webSocket.close(); } catch (Exception ignored) {}
-        try { if (chatServer != null) chatServer.close(); } catch (Exception ignored) {}
         try { if (radarSocket != null) radarSocket.close(); } catch (Exception ignored) {}
         try { if (wifiLock != null && wifiLock.isHeld()) wifiLock.release(); } catch (Exception ignored) {}
         try { if (wakeLock != null && wakeLock.isHeld()) wakeLock.release(); } catch (Exception ignored) {}
     }
 
-    public void broadcastReceiverRadar(String myIp) {
+    // Broadcasts Receiver presence with real IP, SSID & Password for Zero-Click Radar Connect
+    public void broadcastReceiverRadar(final String myIp, final String ssid, final String pass) {
         pool.execute(() -> {
             try {
                 radarSocket = new DatagramSocket();
                 radarSocket.setBroadcast(true);
-                byte[] msg = ("HYPERSHARE|" + Build.MODEL + "|" + myIp).getBytes();
+                String safeSsid = (ssid == null || ssid.isEmpty()) ? "Hotspot" : ssid;
+                String safePass = (pass == null || pass.isEmpty()) ? "none" : pass;
+                byte[] msg = ("HYPERSHARE|" + Build.MODEL + "|" + myIp + "|" + safeSsid + "|" + safePass).getBytes();
                 while (active) {
                     DatagramPacket pkt = new DatagramPacket(msg, msg.length, InetAddress.getByName("255.255.255.255"), RADAR_PORT);
                     radarSocket.send(pkt);
-                    Thread.sleep(900);
+                    Thread.sleep(800);
                 }
             } catch (Exception ignored) {}
         });
     }
 
-    public void scanRadar(Callback cb) {
+    public void scanRadar(final Callback cb) {
         pool.execute(() -> {
-            try (DatagramSocket ds = new DatagramSocket(RADAR_PORT)) {
-                byte[] buf = new byte[256];
+            try (DatagramSocket ds = new DatagramSocket(null)) {
+                ds.setReuseAddress(true);
+                ds.bind(new InetSocketAddress(RADAR_PORT));
+                byte[] buf = new byte[512];
                 while (active) {
                     DatagramPacket pkt = new DatagramPacket(buf, buf.length);
                     ds.receive(pkt);
                     String s = new String(pkt.getData(), 0, pkt.getLength());
                     if (s.startsWith("HYPERSHARE|")) {
                         String[] p = s.split("\\|");
-                        if (p.length >= 3) cb.onRadarFound(p[1], p[2]);
+                        if (p.length >= 5) {
+                            cb.onRadarFound(p[1], p[2], p[3], p[4]);
+                        } else if (p.length >= 3) {
+                            cb.onRadarFound(p[1], p[2], "Hotspot", "none");
+                        }
                     }
                 }
             } catch (Exception ignored) {}
         });
     }
 
-    // OFFLINE CHAT & CLIPBOARD LINK SHARE ENGINE
-    public void startOfflineChatServer(ChatListener listener) {
-        pool.execute(() -> {
-            try {
-                chatServer = new ServerSocket(CHAT_PORT);
-                while (active) {
-                    Socket c = chatServer.accept();
-                    DataInputStream dis = new DataInputStream(c.getInputStream());
-                    String sender = dis.readUTF();
-                    String msg = dis.readUTF();
-                    dis.close();
-                    c.close();
-                    listener.onMessageReceived(sender, msg);
-                }
-            } catch (Exception ignored) {}
-        });
-    }
-
-    public void sendOfflineChatOrClipboard(String targetIp, String message) {
-        pool.execute(() -> {
-            try (Socket c = new Socket()) {
-                c.connect(new InetSocketAddress(targetIp, CHAT_PORT), 4000);
-                DataOutputStream dos = new DataOutputStream(c.getOutputStream());
-                dos.writeUTF(Build.MODEL);
-                dos.writeUTF(message);
-                dos.flush();
-                dos.close();
-            } catch (Exception ignored) {}
-        });
-    }
-
-    public void sendFiles(Context ctx, String targetIp, List<AppSession.ShareItem> list, Callback cb) {
+    // REAL HIGH-SPEED SENDER WITH TRUE BYTE-OFFSET RESUME
+    public void sendFiles(final Context ctx, final String targetIp, final List<AppSession.ShareItem> list, final Callback cb) {
         acquireHardwareLocks(ctx);
         final int dynBuffer = getDynamicBufferSize(ctx);
 
@@ -216,96 +158,146 @@ public class MultiTransferEngine {
                 soc.setKeepAlive(true);
                 soc.setTrafficClass(0x10 | 0x08);
                 soc.setSendBufferSize(dynBuffer * 2);
-                soc.connect(new InetSocketAddress(targetIp, PORT), 7000);
+                soc.connect(new InetSocketAddress(targetIp, PORT), 8000);
 
                 DataOutputStream dos = new DataOutputStream(new BufferedOutputStream(soc.getOutputStream(), dynBuffer));
+                DataInputStream dis = new DataInputStream(new BufferedInputStream(soc.getInputStream()));
+
                 dos.writeInt(list.size());
-                long totalBytes = 0;
+                dos.flush();
+
+                long batchTotalBytes = 0;
+                for (AppSession.ShareItem it : list) batchTotalBytes += it.size;
+                long batchSentBytes = 0;
+
                 byte[] buf = new byte[dynBuffer];
+                long startTime = System.currentTimeMillis();
 
                 for (int i = 0; i < list.size(); i++) {
                     AppSession.ShareItem item = list.get(i);
                     File f = new File(item.path);
                     long len = f.length();
+
                     dos.writeUTF(item.name);
                     dos.writeLong(len);
+                    dos.flush();
+
+                    // Read resume byte offset from Receiver (0 if new file, >0 if resuming broken transfer)
+                    long resumeOffset = dis.readLong();
+                    if (resumeOffset < 0 || resumeOffset >= len) resumeOffset = 0;
+                    batchSentBytes += resumeOffset;
 
                     try (BufferedInputStream bis = new BufferedInputStream(new FileInputStream(f), dynBuffer)) {
-                        long sent = 0;
+                        if (resumeOffset > 0) {
+                            long skipped = 0;
+                            while (skipped < resumeOffset) {
+                                long s = bis.skip(resumeOffset - skipped);
+                                if (s <= 0) break;
+                                skipped += s;
+                            }
+                        }
+
+                        long sent = resumeOffset;
                         int r;
-                        long t0 = System.currentTimeMillis();
                         while ((r = bis.read(buf)) != -1) {
                             waitIfPaused();
                             dos.write(buf, 0, r);
                             sent += r;
-                            totalBytes += r;
-                            long dt = Math.max(1, System.currentTimeMillis() - t0);
-                            double mbps = ((sent * 8.0) / 1048576.0) / (dt / 1000.0);
+                            batchSentBytes += r;
+
+                            long dt = Math.max(1, System.currentTimeMillis() - startTime);
+                            double mbps = ((batchSentBytes * 8.0) / 1048576.0) / (dt / 1000.0);
                             int pct = len > 0 ? (int) ((sent * 100) / len) : 100;
-                            cb.onProgress(item.name, i + 1, list.size(), pct, mbps);
+                            long rem = Math.max(0, batchTotalBytes - batchSentBytes);
+                            cb.onProgress(item.name, i + 1, list.size(), pct, mbps, rem);
                         }
                     }
                     dos.flush();
                     AppSession.historyVault.add(0, item);
                 }
+
                 dos.close();
+                dis.close();
                 soc.close();
-                AppSession.addStats(ctx, totalBytes, 0, list.size());
+                AppSession.addStats(ctx, batchSentBytes, 0, list.size());
                 HapticSoundEngine.popSuccess(ctx);
-                cb.onDone(list.size(), totalBytes);
+                cb.onDone(list.size(), batchSentBytes);
             } catch (Exception e) {
-                cb.onError(e.getMessage());
+                cb.onError("Connection Error: " + e.getMessage());
             }
         });
     }
 
-    public void startReceiver(Context ctx, File dir, Callback cb) {
+    // REAL HIGH-SPEED RECEIVER WITH RANDOMACCESSFILE RESUME & GALLERY MEDIA SCANNER
+    public void startReceiver(final Context ctx, final File dir, final Callback cb) {
         acquireHardwareLocks(ctx);
         final int dynBuffer = getDynamicBufferSize(ctx);
 
         pool.execute(() -> {
             try {
-                serverSocket = new ServerSocket(PORT);
+                serverSocket = new ServerSocket();
+                serverSocket.setReuseAddress(true);
                 serverSocket.setReceiveBufferSize(dynBuffer * 2);
+                serverSocket.bind(new InetSocketAddress(PORT));
+
                 while (active) {
                     Socket client = serverSocket.accept();
                     client.setTcpNoDelay(true);
                     client.setTrafficClass(0x10 | 0x08);
+
                     DataInputStream dis = new DataInputStream(new BufferedInputStream(client.getInputStream(), dynBuffer));
+                    DataOutputStream dos = new DataOutputStream(new BufferedOutputStream(client.getOutputStream()));
+
                     int count = dis.readInt();
                     long totalBytes = 0;
                     byte[] buf = new byte[dynBuffer];
                     if (!dir.exists()) dir.mkdirs();
+
+                    long startTime = System.currentTimeMillis();
 
                     for (int i = 0; i < count; i++) {
                         String name = dis.readUTF();
                         long len = dis.readLong();
 
                         if (!AppSession.hasEnoughFreeStorage(len)) {
-                            cb.onError("Storage Full Warning! Not enough free space for " + name);
+                            dos.writeLong(0);
+                            dos.flush();
+                            cb.onError("Storage Full! Free some space to receive " + name);
                             break;
                         }
 
                         File out = new File(dir, name);
-                        try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(out), dynBuffer)) {
-                            long rec = 0;
+                        long existingLen = (out.exists() && out.length() < len) ? out.length() : 0;
+
+                        // Tell Sender the exact byte position to resume from
+                        dos.writeLong(existingLen);
+                        dos.flush();
+
+                        try (RandomAccessFile raf = new RandomAccessFile(out, "rw")) {
+                            raf.seek(existingLen);
+                            long rec = existingLen;
                             int r;
-                            long t0 = System.currentTimeMillis();
                             while (rec < len && (r = dis.read(buf, 0, (int) Math.min(buf.length, len - rec))) != -1) {
                                 waitIfPaused();
-                                bos.write(buf, 0, r);
+                                raf.write(buf, 0, r);
                                 rec += r;
                                 totalBytes += r;
-                                long dt = Math.max(1, System.currentTimeMillis() - t0);
-                                double mbps = ((rec * 8.0) / 1048576.0) / (dt / 1000.0);
+
+                                long dt = Math.max(1, System.currentTimeMillis() - startTime);
+                                double mbps = ((totalBytes * 8.0) / 1048576.0) / (dt / 1000.0);
                                 int pct = len > 0 ? (int) ((rec * 100) / len) : 100;
-                                cb.onProgress(name, i + 1, count, pct, mbps);
+                                long rem = Math.max(0, len - rec);
+                                cb.onProgress(name, i + 1, count, pct, mbps, rem);
                             }
-                            bos.flush();
                         }
-                        AppSession.historyVault.add(0, new AppSession.ShareItem(name, out.getAbsolutePath(), len, "RECEIVED"));
+
+                        // Immediately index received file into Android Gallery & Media Player
+                        MediaScannerConnection.scanFile(ctx, new String[]{out.getAbsolutePath()}, null, null);
+                        AppSession.historyVault.add(0, new AppSession.ShareItem(name, out.getAbsolutePath(), len, "FILES", AppSession.formatSize(len), ""));
                     }
+
                     dis.close();
+                    dos.close();
                     client.close();
                     AppSession.addStats(ctx, 0, totalBytes, count);
                     HapticSoundEngine.popSuccess(ctx);
@@ -321,7 +313,9 @@ public class MultiTransferEngine {
         pool.execute(() -> {
             try {
                 if (webSocket != null && !webSocket.isClosed()) return;
-                webSocket = new ServerSocket(WEB_PORT);
+                webSocket = new ServerSocket();
+                webSocket.setReuseAddress(true);
+                webSocket.bind(new InetSocketAddress(WEB_PORT));
                 while (active) {
                     final Socket client = webSocket.accept();
                     pool.execute(() -> handleWebClient(client));
@@ -364,23 +358,23 @@ public class MultiTransferEngine {
 
             StringBuilder rows = new StringBuilder();
             if (AppSession.selectedQueue.isEmpty()) {
-                rows.append("<p style='color:#FACC15;font-size:18px;'>No files selected yet! Select Videos, Apps or Files on phone.</p>");
+                rows.append("<p style='color:#64748B;font-size:17px;'>No files selected yet. Go to Send on your phone and select files first.</p>");
             } else {
                 for (int i = 0; i < AppSession.selectedQueue.size(); i++) {
                     AppSession.ShareItem it = AppSession.selectedQueue.get(i);
-                    rows.append("<div style='background:#151E32;border:1px solid #00F5D4;border-radius:16px;padding:18px;margin:14px auto;max-width:600px;display:flex;justify-content:space-between;align-items:center;'>")
-                        .append("<div style='text-align:left;color:white;'><b>").append(it.name).append("</b><br><span style='color:#38BDF8;font-size:13px;'>").append(AppSession.formatSize(it.size)).append("</span></div>")
-                        .append("<a href='/download/").append(i).append("' style='background:#00F5D4;color:#070B14;padding:12px 22px;border-radius:12px;text-decoration:none;font-weight:bold;'>⬇ DOWNLOAD</a>")
+                    rows.append("<div style='background:#F8FAFC;border:1px solid #E2E8F0;border-radius:14px;padding:16px;margin:12px auto;max-width:560px;display:flex;justify-content:space-between;align-items:center;'>")
+                        .append("<div style='text-align:left;color:#0F172A;'><b>").append(it.name).append("</b><br><span style='color:#64748B;font-size:13px;'>").append(AppSession.formatSize(it.size)).append("</span></div>")
+                        .append("<a href='/download/").append(i).append("' style='background:#16CC3E;color:#FFFFFF;padding:10px 20px;border-radius:20px;text-decoration:none;font-weight:bold;'>Download</a>")
                         .append("</div>");
                 }
             }
 
             String html = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n"
                     + "<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'></head>"
-                    + "<body style='background:#070B14;color:#00F5D4;font-family:sans-serif;text-align:center;padding:25px;'>"
-                    + "<div style='border:2px solid #00F5D4;border-radius:24px;padding:25px;background:#11192E;max-width:700px;margin:auto;'>"
-                    + "<h1>⚡ HyperShare X - TV / PC / Laptop Hub</h1>"
-                    + "<p style='color:#94A3B8;'>Device: <b style='color:white;'>" + Build.MODEL + "</b></p>"
+                    + "<body style='background:#FFFFFF;color:#0F172A;font-family:sans-serif;text-align:center;padding:25px;'>"
+                    + "<div style='border:1px solid #E2E8F0;border-radius:24px;padding:25px;max-width:650px;margin:auto;'>"
+                    + "<h2 style='color:#1890FF;'>HyperShare Web Transfer</h2>"
+                    + "<p style='color:#64748B;'>Connected Device: <b>" + Build.MODEL + "</b></p>"
                     + rows.toString()
                     + "</div></body></html>";
             out.write(html.getBytes("UTF-8"));
@@ -389,14 +383,7 @@ public class MultiTransferEngine {
         } catch (Exception ignored) {}
     }
 
-    @SuppressWarnings("deprecation")
     public static String getLocalIp(Context ctx) {
-        try {
-            WifiManager wm = (WifiManager) ctx.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-            int ip = wm.getConnectionInfo().getIpAddress();
-            return ip == 0 ? "192.168.43.1" : Formatter.formatIpAddress(ip);
-        } catch (Exception e) {
-            return "192.168.43.1";
-        }
+        return WifiDirectEngine.getRealDeviceIp(ctx);
     }
 }

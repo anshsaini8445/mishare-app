@@ -13,14 +13,18 @@ public class QrGenerator {
 
     private static final Map<String, Bitmap> qrCache = new HashMap<>();
 
+    // Creates QR for either Web URL or Full Wi-Fi Direct Auto-Connect Payload
     public static Bitmap createAutoQr(String payload) {
         try {
-            String data = payload.contains("http") ? payload : ("HYPERSHARE|" + payload + "|" + Build.MODEL + "|" + (System.currentTimeMillis() / 60000));
+            String data = (payload.startsWith("http") || payload.startsWith("HYPERSHARE|"))
+                    ? payload
+                    : ("HYPERSHARE|DIRECT-" + Build.MODEL + "|hyper1234|" + payload + "|" + Build.MODEL);
+
             if (qrCache.containsKey(data)) {
                 return qrCache.get(data);
             }
 
-            int size = 440;
+            int size = 460;
             BitMatrix matrix = new QRCodeWriter().encode(data, BarcodeFormat.QR_CODE, size, size);
             int[] pixels = new int[size * size];
 
@@ -40,13 +44,18 @@ public class QrGenerator {
         }
     }
 
-    // Live Shimmer & Scale-Up Animation so QR Code feels 100% Live
+    public static String buildWifiQrPayload(String ssid, String password, String ip) {
+        String cleanSsid = (ssid == null || ssid.isEmpty()) ? "Hotspot" : ssid;
+        String cleanPass = (password == null || password.isEmpty()) ? "none" : password;
+        return "HYPERSHARE|" + cleanSsid + "|" + cleanPass + "|" + ip + "|" + Build.MODEL;
+    }
+
     public static void displayLiveQr(ImageView iv, String payload) {
         if (iv == null) return;
         iv.setAlpha(0f);
-        iv.setScaleX(0.82f);
-        iv.setScaleY(0.82f);
+        iv.setScaleX(0.88f);
+        iv.setScaleY(0.88f);
         iv.setImageBitmap(createAutoQr(payload));
-        iv.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(320).start();
+        iv.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(260).start();
     }
 }

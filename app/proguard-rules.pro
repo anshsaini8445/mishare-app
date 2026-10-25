@@ -1,5 +1,8 @@
 -keep class com.proshare.app.** { *; }
 -keep class com.google.zxing.** { *; }
 -keep class com.journeyapps.** { *; }
+-keep public class * implements com.bumptech.glide.module.GlideModule
+-keep public class * extends com.bumptech.glide.module.AppGlideModule
 -dontwarn com.google.zxing.**
+-dontwarn com.bumptech.glide.**
 -ignorewarnings
